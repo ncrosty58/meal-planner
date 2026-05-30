@@ -90,6 +90,69 @@
             margin-top: 1rem;
         }
 
+        /* Loading Overlay with Glassmorphism blur */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(11, 15, 25, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .loading-spinner-container {
+            text-align: center;
+            padding: 2.5rem;
+            background: rgba(22, 30, 49, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            max-width: 450px;
+            width: 90%;
+            animation: scaleUp 0.3s ease-out;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(229, 131, 37, 0.1);
+            border-top: 4px solid var(--color-primary);
+            border-radius: 50%;
+            margin: 0 auto 1.5rem auto;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-glow);
+            margin-bottom: 0.75rem;
+        }
+
+        .loading-subtext {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes scaleUp {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
         /* Glass Cards */
         .card {
             background: var(--bg-surface);
@@ -706,6 +769,59 @@
         </div>
         {% endif %}
 
+    <!-- Loading Overlay HTML -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner-container">
+            <div class="loading-spinner"></div>
+            <div class="loading-text" id="loading-text">Generating Weekly Plan...</div>
+            <div class="loading-subtext">Please do not close or leave this page. Your shopping list is being recalculated.</div>
+        </div>
     </div>
+
+    <script>
+        var isRecalculating = false;
+
+        window.addEventListener('beforeunload', function (e) {
+            if (isRecalculating) {
+                e.preventDefault();
+                e.returnValue = 'Your changes are being processed. Please do not leave or refresh the page.';
+                return e.returnValue;
+            }
+        });
+
+        function showLoading(text) {
+            isRecalculating = true;
+            document.getElementById('loading-text').innerText = text;
+            document.getElementById('loading-overlay').style.display = 'flex';
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // 1. Swap Dinner recipe dropdown change event
+            const recipeSelects = document.querySelectorAll('.select-recipe');
+            recipeSelects.forEach(function(select) {
+                select.addEventListener('change', function() {
+                    if (this.value) {
+                        showLoading('Swapping Recipe & Recalculating List...');
+                    }
+                });
+            });
+
+            // 2. Recalculate Shopping List button submit
+            const syncForms = document.querySelectorAll('form[action*="/sync"]');
+            syncForms.forEach(function(form) {
+                form.addEventListener('submit', function() {
+                    showLoading('Recalculating Shopping List...');
+                });
+            });
+
+            // 3. Main plan generation form submit
+            const planForms = document.querySelectorAll('form[action*="/plan"]');
+            planForms.forEach(function(form) {
+                form.addEventListener('submit', function() {
+                    showLoading('Generating Weekly Plan...');
+                });
+            });
+        });
+    </script>
 </body>
 </html>
