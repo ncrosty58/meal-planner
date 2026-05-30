@@ -124,11 +124,19 @@ class MealieClient:
         return r.json().get('listItems', [])
 
     def clear_shopping_list(self, list_id):
-        """Delete all items from a shopping list."""
+        """Delete all items from a shopping list using Mealie's bulk delete endpoint."""
         items = self.get_shopping_list_items(list_id)
-        for item in items:
-            item_id = item['id']
-            requests.delete(f"{self.api_url}/api/households/shopping/items/{item_id}", headers=self.headers)
+        if not items:
+            return
+        item_ids = [item['id'] for item in items]
+        
+        # Chunk requests to prevent extremely long URL queries
+        chunk_size = 50
+        for i in range(0, len(item_ids), chunk_size):
+            chunk = item_ids[i:i+chunk_size]
+            r = requests.delete(f"{self.api_url}/api/households/shopping/items", params={"ids": chunk}, headers=self.headers)
+            r.raise_for_status()
+
 
     def add_shopping_list_items_bulk(self, items):
         """Add multiple items to the shopping list in bulk."""
