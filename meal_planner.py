@@ -1,8 +1,9 @@
 import os
-import sqlite3
-import requests
-import smtplib
 import re
+import random
+import sqlite3
+import smtplib
+import requests
 import urllib.request
 import urllib.parse
 from datetime import datetime, timedelta
@@ -20,6 +21,12 @@ DIRTY_DOZEN = {
     'nectarine', 'nectarines', 'apple', 'apples', 'bell pepper', 'bell peppers', 
     'hot pepper', 'hot peppers', 'chili pepper', 'chili peppers', 'cherry', 
     'cherries', 'blueberry', 'blueberries', 'green bean', 'green beans'
+}
+
+# Processed meats to always exclude from meal planning
+PROCESSED_MEATS = {
+    'sausage', 'hotdog', 'hot dog', 'chorizo', 'salami',
+    'pepperoni', 'bacon', 'ham', 'pancetta'
 }
 
 BREAKFAST_PROFILES = {
@@ -172,30 +179,6 @@ class MealieClient:
         """Delete a meal plan entry by ID."""
         requests.delete(f"{self.api_url}/api/households/mealplans/{entry_id}", headers=self.headers)
 
-
-def clean_recipe_selection(recipes):
-    """Filter out recipes with processed meats and sort by family preferences."""
-    filtered = []
-    processed_keywords = ['sausage', 'hotdog', 'hot dog', 'chorizo', 'salami', 'pepperoni', 'bacon', 'ham']
-    
-    for r in recipes:
-        name_lower = r['name'].lower()
-        slug_lower = r['slug'].lower()
-        description_lower = r.get('description', '').lower() if r.get('description') else ''
-        
-        # Skip processed sausage-type meats
-        if any(kw in name_lower or kw in slug_lower or kw in description_lower for kw in processed_keywords):
-            continue
-            
-        # Avoid heavy red meat recipes (beef, pork) in favor of vegetarian, fish, and poultry
-        # Keep ground turkey/chicken smash burgers, salmon, and vegetarian dishes.
-        if 'beef' in name_lower or 'pork' in name_lower:
-            # Only include beef if it's taco/burger and we don't have enough options
-            # For Nathan/Kristin, avoiding red meat is preferred, but salmon/chicken is welcome.
-            continue
-            
-        filtered.append(r)
-    return filtered
 
 
 def tag_dirty_dozen(note):
@@ -409,7 +392,7 @@ def clean_staple_name(note):
         'jar of', 'jars of', 'jar', 'jars',
         'slice of', 'slices of', 'slice', 'slices',
         'pkg', 'pkgs', 'package', 'packages', 'package of', 'packages of',
-        'c\.', 't\.', 'g', 'ml', 'l'
+        'c.', 't.', 'g', 'ml', 'l'
     ]
     
     units.sort(key=len, reverse=True)
@@ -588,11 +571,7 @@ def find_recipe_for_ingredient(ingredient):
             row = cursor.fetchone()
             conn.close()
             if row:
-                # SQLite returns CHAR(32) which might need dashes
-                r_id = row[0]
-                if '-' not in r_id and len(r_id) == 32:
-                    r_id = f"{r_id[:8]}-{r_id[8:12]}-{r_id[12:16]}-{r_id[16:20]}-{r_id[20:]}"
-                return r_id
+                return format_uuid(row[0])
         except Exception as e:
             print(f"Error querying SQLite for ingredients: {e}")
             
@@ -655,8 +634,6 @@ def find_and_import_recipe(ingredient):
         print(f"Error searching DuckDuckGo: {e}")
     return False
 
-
-import random
 
 def format_uuid(r_id):
     """Convert a 32-character hex string to a 36-character UUID string with dashes."""
@@ -896,9 +873,8 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
     # 2. Fetch all recipes (freshly imported or from DB)
     all_recipes = get_recipes_from_db()
     
-    # 3. Clean and filter recipes (exclude processed meat)
+    # 3. Clean and filter recipes (exclude processed meats via PROCESSED_MEATS constant)
     allowed_recipes = []
-    processed_avoid = {'sausage', 'hotdog', 'hot dog', 'chorizo', 'salami', 'pepperoni', 'bacon', 'ham', 'pancetta'}
     
     for r in all_recipes:
         name_lower = r['name'].lower()
@@ -908,7 +884,10 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
         
         all_text = f"{name_lower} {slug_lower} {desc_lower} " + " ".join(tags)
         
-        if any(kw in all_text for kw in processed_avoid):
+        # Cache all_text on the recipe dict to reuse in the scoring loop below
+        r['_all_text'] = all_text
+        
+        if any(kw in all_text for kw in PROCESSED_MEATS):
             continue
             
         allowed_recipes.append(r)
@@ -939,6 +918,9 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
             if theme in special_req_lower or any(p in special_req_lower for p in patterns):
                 requested_themes.append(theme)
                 
+    # Derive breakfast rotation directly from the nutrition profiles so the two can't drift
+    breakfasts = list(BREAKFAST_PROFILES.keys())
+    
     for r in allowed_recipes:
         score = 0
         r_id = r['id']
@@ -949,7 +931,8 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
         ings = r.get('ingredients', [])
         insts = r.get('instructions', [])
         
-        all_text = f"{name_lower} {slug_lower} {desc_lower} " + " ".join(tags)
+        # Reuse the pre-computed all_text from the filtering pass to avoid rebuilding it
+        all_text = r.get('_all_text') or (f"{name_lower} {slug_lower} {desc_lower} " + " ".join(tags))
         
         # A. Freezer items match (Highest Priority)
         # If the recipe ID was explicitly identified as priority freezer recipe
@@ -1012,7 +995,6 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
     end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
     current_date = start_date
     recipe_index = 0
-    breakfasts = ["Cereal & Milk", "Toast with Jam", "Bagels & Cream Cheese", "Yogurt with Granola", "English Muffins with Jam"]
     
     exclusions = parse_exclusions(exclude_text)
     
