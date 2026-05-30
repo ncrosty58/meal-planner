@@ -657,8 +657,8 @@ Is this a single recipe?
     return False
 
 
-def get_recipes_from_db():
-    """Fetch all recipes with their nutrition, tags, and ingredients from Mealie via API concurrently."""
+def get_recipes_from_api_fallback():
+    """Fetch all recipes with their nutrition, tags, and ingredients from Mealie via API concurrently as a fallback."""
     client = MealieClient()
     try:
         all_recipes_overview = client.get_all_recipes()
@@ -700,7 +700,8 @@ def get_recipes_from_db():
                 print(f"Error fetching detailed recipe for {r_overview.get('id', 'Unknown')}: {e}")
                 return None
 
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        # Fallback to a safe number of max_workers (2 threads)
+        with ThreadPoolExecutor(max_workers=2) as executor:
             results = executor.map(fetch_details, all_recipes_overview)
             
         for res in results:
@@ -711,6 +712,112 @@ def get_recipes_from_db():
     except Exception as e:
         print(f"Error fetching all recipes via API: {e}")
         return []
+
+def get_recipes_from_db():
+    """Fetch all recipes with their nutrition, tags, and ingredients from Mealie, attempting direct SQLite access first."""
+    db_paths = [
+        '/mealie-data/mealie.db',
+        '/app/data/mealie.db',
+        '/var/lib/docker/volumes/mealie_mealie-data/_data/mealie.db'
+    ]
+    db_path = None
+    for path in db_paths:
+        if os.path.exists(path):
+            db_path = path
+            break
+            
+    if not db_path:
+        print("Warning: Mealie SQLite database file not found. Falling back to Mealie Client API.")
+        return get_recipes_from_api_fallback()
+        
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # 1. Fetch recipes & nutrition
+        cursor.execute("""
+            SELECT 
+                r.id, r.name, r.slug, r.description,
+                n.calories, n.fiber_content, n.protein_content,
+                n.carbohydrate_content, n.fat_content, n.sodium_content,
+                n.sugar_content, n.cholesterol_content
+            FROM recipes r
+            LEFT JOIN recipe_nutrition n ON r.id = n.recipe_id
+        """)
+        recipe_rows = cursor.fetchall()
+        
+        # 2. Fetch ingredients
+        cursor.execute("""
+            SELECT recipe_id, note, original_text
+            FROM recipes_ingredients
+            ORDER BY position
+        """)
+        ingredients_rows = cursor.fetchall()
+        ingredients_by_recipe = {}
+        for row in ingredients_rows:
+            rid = row['recipe_id']
+            note = row['note'] or ""
+            orig = row['original_text'] or ""
+            ing_text = f"{note} {orig}".strip()
+            if ing_text:
+                ingredients_by_recipe.setdefault(rid, []).append(ing_text.lower())
+                
+        # 3. Fetch instructions
+        cursor.execute("""
+            SELECT recipe_id, text
+            FROM recipe_instructions
+            ORDER BY position
+        """)
+        instructions_rows = cursor.fetchall()
+        instructions_by_recipe = {}
+        for row in instructions_rows:
+            rid = row['recipe_id']
+            text = row['text'] or ""
+            if text:
+                instructions_by_recipe.setdefault(rid, []).append(text.lower())
+                
+        # 4. Fetch tags
+        cursor.execute("""
+            SELECT rt.recipe_id, t.name
+            FROM recipes_to_tags rt
+            JOIN tags t ON rt.tag_id = t.id
+        """)
+        tags_rows = cursor.fetchall()
+        tags_by_recipe = {}
+        for row in tags_rows:
+            rid = row['recipe_id']
+            tname = row['name'] or ""
+            if tname:
+                tags_by_recipe.setdefault(rid, []).append(tname.lower())
+                
+        detailed_recipes = []
+        for r in recipe_rows:
+            rid = r['id']
+            detailed_recipes.append({
+                'id': rid,
+                'name': r['name'],
+                'slug': r['slug'],
+                'description': r['description'],
+                'calories': parse_nutrient_val(r['calories']),
+                'fiber_content': parse_nutrient_val(r['fiber_content']),
+                'protein_content': parse_nutrient_val(r['protein_content']),
+                'carbohydrate_content': parse_nutrient_val(r['carbohydrate_content']),
+                'fat_content': parse_nutrient_val(r['fat_content']),
+                'sodium_content': parse_nutrient_val(r['sodium_content']),
+                'sugar_content': parse_nutrient_val(r['sugar_content']),
+                'cholesterol_content': parse_nutrient_val(r['cholesterol_content']),
+                'tags': tags_by_recipe.get(rid, []),
+                'ingredients': ingredients_by_recipe.get(rid, []),
+                'instructions': instructions_by_recipe.get(rid, [])
+            })
+            
+        conn.close()
+        print(f"Successfully loaded {len(detailed_recipes)} recipes directly from SQLite database.")
+        return detailed_recipes
+    except Exception as e:
+        print(f"SQLite database query error: {e}. Falling back to Mealie Client API.")
+        return get_recipes_from_api_fallback()
 
 def parse_exclusions(text: str) -> dict:
     """Use Gemini to interpret a free-text description of which meals to skip, delegating to the AI skill."""
