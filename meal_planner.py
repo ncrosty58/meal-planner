@@ -12,6 +12,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor
 
 # Load environment variables
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
@@ -657,15 +658,15 @@ Is this a single recipe?
 
 
 def get_recipes_from_db():
-    """Fetch all recipes with their nutrition, tags, and ingredients from Mealie via API."""
+    """Fetch all recipes with their nutrition, tags, and ingredients from Mealie via API concurrently."""
     client = MealieClient()
     try:
         all_recipes_overview = client.get_all_recipes()
         detailed_recipes = []
-        for r_overview in all_recipes_overview:
+        
+        def fetch_details(r_overview):
             try:
                 full_recipe = client.get_recipe_details(r_overview['id'])
-                
                 nutrition = full_recipe.get('nutrition', {})
                 
                 ingredients_list = []
@@ -678,7 +679,7 @@ def get_recipes_from_db():
                 
                 instructions_list = [i.get('text', '').lower() for i in full_recipe.get('recipeInstructions', [])]
                 
-                detailed_recipes.append({
+                return {
                     'id': full_recipe['id'],
                     'name': full_recipe['name'],
                     'slug': full_recipe.get('slug'),
@@ -694,9 +695,18 @@ def get_recipes_from_db():
                     'tags': [t.get('name', '').lower() for t in full_recipe.get('tags', [])],
                     'ingredients': ingredients_list,
                     'instructions': instructions_list
-                })
+                }
             except Exception as e:
                 print(f"Error fetching detailed recipe for {r_overview.get('id', 'Unknown')}: {e}")
+                return None
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = executor.map(fetch_details, all_recipes_overview)
+            
+        for res in results:
+            if res is not None:
+                detailed_recipes.append(res)
+                
         return detailed_recipes
     except Exception as e:
         print(f"Error fetching all recipes via API: {e}")
