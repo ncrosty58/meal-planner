@@ -641,10 +641,9 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_days=[], freezer_
     # 2. Fetch all recipes (freshly imported or from DB)
     all_recipes = get_recipes_from_db()
     
-    # 3. Clean and filter recipes (exclude beef, pork, processed meat)
+    # 3. Clean and filter recipes (exclude processed meat)
     allowed_recipes = []
     processed_avoid = {'sausage', 'hotdog', 'hot dog', 'chorizo', 'salami', 'pepperoni', 'bacon', 'ham', 'pancetta'}
-    red_meat_avoid = {'beef', 'pork', 'steak', 'ribeye', 'sirloin', 'porkchop', 'pork chop', 'ribs'}
     
     for r in all_recipes:
         name_lower = r['name'].lower()
@@ -655,8 +654,6 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_days=[], freezer_
         all_text = f"{name_lower} {slug_lower} {desc_lower} " + " ".join(tags)
         
         if any(kw in all_text for kw in processed_avoid):
-            continue
-        if any(kw in all_text for kw in red_meat_avoid):
             continue
             
         allowed_recipes.append(r)
@@ -740,7 +737,12 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_days=[], freezer_
         if fiber_val > 0:
             score += fiber_val * 15  # 1g of fiber gives +15 points
             
-        # D. Add small random variation to shuffle recipes with equal scores
+        # D. Beef/Steak penalty (expensive/seldom)
+        beef_steak_kws = {'beef', 'steak', 'ribeye', 'sirloin', 'chuck', 'brisket', 'ground beef'}
+        if any(kw in all_text for kw in beef_steak_kws):
+            score -= 100
+            
+        # E. Add small random variation to shuffle recipes with equal scores
         score += random.uniform(-2, 2)
         
         scored_recipes.append((score, r))

@@ -15,7 +15,9 @@ This skill contains the constraints, business rules, and integration workflows f
 ## Household & Dietary Constraints
 - **Family Members**: Nathan, Kristin, Charlotte (11), Leah (6).
 - **Diet**: Predominantly vegetarian/pescatarian. Prioritize fish (salmon, tuna), poultry (chicken, turkey), and vegetarian dishes.
-- **Forbidden Meats**: Strictly avoid beef, pork, steak, and any processed sausage-type meats (hot dogs, chorizo, salami, pepperoni, bacon, ham, pancetta).
+- **Pork**: Pork is OK (except processed pork like bacon, ham, and chorizo).
+- **Beef & Steak**: We still eat beef and steak, but seldom (due to cost). Apply a penalty in the scoring engine so they are scheduled rarely unless explicitly requested by the user.
+- **Forbidden Meats**: Strictly avoid processed sausage-type meats (hot dogs, chorizo, salami, pepperoni, bacon, ham, pancetta).
 - **Fiber Target**: Highly prioritize dietary fiber (target `28g` daily per person baseline). Focus on beans, lentils, whole grains, and fiber-rich vegetables.
 - **Organic Target**: Automatically append `(Buy Organic)` to ingredients matching the USDA "Dirty Dozen" (strawberries, spinach, kale, collard/mustard greens, grapes, peaches, pears, nectarines, apples, bell peppers, hot/chili peppers, cherries, blueberries, green beans).
 
