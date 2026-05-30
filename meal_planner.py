@@ -29,6 +29,7 @@ _STAPLE_NAME_CLEANING_SKILL_DEFINITION = load_skill_md('staple-name-cleaning')
 _MEAL_EXCLUSION_PARSING_SKILL_DEFINITION = load_skill_md('meal-exclusion-parsing')
 _WEEKLY_MEAL_SELECTION_SKILL_DEFINITION = load_skill_md('weekly-meal-selection')
 _SHOPPING_LIST_SYNC_SKILL_DEFINITION = load_skill_md('shopping-list-sync')
+_WATER_DETECTOR_SKILL_DEFINITION = load_skill_md('water-detector')
 
 
 
@@ -383,14 +384,73 @@ def clean_staple_names_batch(notes: list) -> dict:
         print(f"[AI] clean_staple_names_batch fallback: {e}")
         return {note: _regex_fallback(note) for note in notes}
 
-def is_plain_water(name: str) -> bool:
+def detect_plain_water_batch(names: list) -> dict:
+    """
+    Use a single Gemini call to determine which ingredient names represent plain water.
+    Falls back to a robust regex/rule-based check per item if the AI call fails.
+    """
+    if not names:
+        return {}
+        
+    def _fallback_check(name):
+        if not name:
+            return False
+        n = name.lower().strip()
+        n = re.sub(r'\(.*?\)', '', n)
+        n = re.split(r'[,;]', n)[0].strip()
+        n = n.replace('/', ' ')
+        plain_water_terms = {
+            'water', 'cold water', 'warm water', 'hot water', 'filtered water',
+            'ice water', 'tap water', 'boiling water'
+        }
+        n = ' '.join(n.split())
+        if n in plain_water_terms:
+            return True
+        if n.endswith(' water'):
+            prefix = n[:-6].strip()
+            words = prefix.split()
+            allowed_adjectives = {'cold', 'warm', 'hot', 'filtered', 'ice', 'tap', 'boiling', 'clean', 'fresh', 'pure'}
+            if words and all(w in allowed_adjectives for w in words):
+                return True
+        return False
+
+    try:
+        unique_names = list(set(name.strip() for name in names if name))
+        if not unique_names:
+            return {}
+            
+        items_json = json.dumps(unique_names)
+        prompt = (
+            """You are an expert in the 'Plain Water Detection Skill'.
+
+""" +
+            _WATER_DETECTOR_SKILL_DEFINITION + """
+
+### CONTEXT FOR THIS INVOCATION:
+""" +
+            f"Ingredients to Classify: {items_json}\n\n" +
+            "Return ONLY the JSON object as specified in the skill definition."
+        )
+        result = json.loads(call_gemini(prompt, expect_json=True))
+        return {name: bool(result.get(name, _fallback_check(name))) for name in names}
+    except Exception as e:
+        print(f"[AI] detect_plain_water_batch fallback: {e}")
+        return {name: _fallback_check(name) for name in names}
+
+def is_plain_water(name: str, water_map: dict = None) -> bool:
     """
     Check if the ingredient name corresponds to plain water (which shouldn't go on a shopping list).
     Allows things like coconut water, rose water, sparkling water, etc.
+    Uses pre-computed water_map if available.
     """
     if not name:
         return False
-    n = name.lower().strip()
+    cleaned = name.strip()
+    if water_map and cleaned in water_map:
+        return water_map[cleaned]
+        
+    # Logic fallback:
+    n = cleaned.lower()
     # Remove text in parentheses: e.g., "water (cold)" -> "water"
     n = re.sub(r'\(.*?\)', '', n)
     # Split on comma or semicolon and take the first part: e.g., "water, cold" -> "water"
@@ -465,10 +525,11 @@ def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[], progres
             staple_lookup[cleaned_name.lower()] = item
             
         ingredients_to_add = {} # cleaned_name_lower -> item_dict
+        water_map = {}
         
         def add_to_list(name, quantity=1.0):
             cleaned = name.strip()
-            if is_plain_water(cleaned):
+            if is_plain_water(cleaned, water_map):
                 return
             cleaned_lower = cleaned.lower()
             if cleaned_lower in ingredients_to_add:
@@ -482,16 +543,9 @@ def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[], progres
                     "checked": False
                 }
                 
-        # 3. Process manually marked low staples first
-        for item in staples:
-            clean_id = item['id'].replace('-', '')
-            if clean_id in low_ids_clean:
-                cleaned_name = item.get('_cleaned_name', item['note'])
-                add_to_list(cleaned_name, quantity=1.0)
-                
-        # 4. Fetch details of all recipes in the meal plan to extract ingredients
+        # 3. Fetch details of all recipes in the meal plan to extract ingredients
         if progress_callback:
-            progress_callback("Extracting ingredients from dinner recipes...", 94)
+            progress_callback("Extracting ingredients from dinner recipes...", 93)
         recipe_ingredients_by_dinner = []
         raw_ing_texts = []
         
@@ -520,11 +574,29 @@ def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[], progres
                 except Exception as e:
                     print(f"Error fetching recipe details for recipe ID {p.get('recipeId')}: {e}")
                     
-        # 5. Clean all recipe ingredient names in batch
+        # 4. Clean all recipe ingredient names in batch
         if progress_callback:
-            progress_callback("Cleaning recipe ingredients using AI/rules...", 96)
+            progress_callback("Cleaning recipe ingredients using AI/rules...", 95)
         unique_ing_texts = list(set(raw_ing_texts))
         cleaned_ing_map = clean_staple_names_batch(unique_ing_texts)
+        
+        # 5. Detect plain water in batch using AI
+        if progress_callback:
+            progress_callback("Detecting plain water using AI...", 97)
+        candidate_names = set()
+        for item in staples:
+            candidate_names.add(item.get('_cleaned_name', item['note']))
+        for raw_ing in unique_ing_texts:
+            candidate_names.add(cleaned_ing_map.get(raw_ing, raw_ing).strip())
+            
+        water_map.update(detect_plain_water_batch(list(candidate_names)))
+        
+        # 6. Process manually marked low staples first
+        for item in staples:
+            clean_id = item['id'].replace('-', '')
+            if clean_id in low_ids_clean:
+                cleaned_name = item.get('_cleaned_name', item['note'])
+                add_to_list(cleaned_name, quantity=1.0)
         
         # 6. Reconcile dinner recipe ingredients
         for p, recipe_ings in recipe_ingredients_by_dinner:
