@@ -363,8 +363,72 @@ def calculate_nutrition_for_range(start_date_str, end_date_str):
     return daily_nutrients, averages
 
 
+def clean_staple_name(note):
+    """
+    Remove quantities, measurements, and units from a staple note.
+    E.g. '6 tbsp Butter' -> 'Butter', '10 cloves Garlic' -> 'Garlic', '1 gallon Milk' -> 'Milk'.
+    """
+    if not note:
+        return ""
+    cleaned = note.strip().lower()
+    
+    # 1. Strip leading quantities (e.g. 6, 10, 3.5, 1/2, 1-2)
+    cleaned = re.sub(r'^\d+[\./\-\d]*\s*', '', cleaned)
+    
+    # 2. Strip common units case-insensitive
+    units = [
+        'tbsp', 'tablespoon', 'tablespoons', 'tbs',
+        'tsp', 'teaspoon', 'teaspoons',
+        'cloves', 'clove', 'head of', 'heads of', 'head', 'heads',
+        'bunch of', 'bunches of', 'bunch', 'bunches',
+        'cans of', 'can of', 'cans', 'can',
+        'gallon of', 'gallon', 'gallons',
+        'bag of', 'bags of', 'bag', 'bags',
+        'cup of', 'cups of', 'cups', 'cup',
+        'oz', 'ounce', 'ounces',
+        'lbs', 'lb', 'pound', 'pounds',
+        'packs of', 'pack of', 'packs', 'pack',
+        'pieces of', 'piece of', 'pieces', 'piece',
+        'container of', 'containers of', 'container', 'containers',
+        'bottle of', 'bottles of', 'bottle', 'bottles',
+        'box of', 'boxes of', 'box', 'boxes',
+        'jar of', 'jars of', 'jar', 'jars',
+        'slice of', 'slices of', 'slice', 'slices',
+        'pkg', 'pkgs', 'package', 'packages', 'package of', 'packages of',
+        'c\.', 't\.', 'g', 'ml', 'l'
+    ]
+    
+    units.sort(key=len, reverse=True)
+    for unit in units:
+        pattern = r'^' + re.escape(unit) + r'\b\s*(?:of\b\s*)?'
+        if re.search(pattern, cleaned):
+            cleaned = re.sub(pattern, '', cleaned)
+            break
+            
+    cleaned = re.sub(r'^of\s+', '', cleaned)
+    cleaned = cleaned.strip()
+    return cleaned.capitalize() if cleaned else note
+
+
+def find_matching_staple(ing_note, staples):
+    """
+    Check if a recipe ingredient note matches any staple item.
+    Returns the staple item if found, else None.
+    """
+    ing_lower = ing_note.lower()
+    for s_item in staples:
+        s_note_lower = s_item['note'].lower()
+        s_clean = clean_staple_name(s_note_lower).lower()
+        
+        # Match if the cleaned staple name is a distinct word in the ingredient note
+        pattern = r'\b' + re.escape(s_clean) + r'\b'
+        if re.search(pattern, ing_lower) or s_clean in ing_lower:
+            return s_item
+    return None
+
+
 def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[]):
-    """Sync active shopping list based on scheduled recipes and low staples."""
+    """Sync active shopping list based on scheduled recipes and low staples, reconciling quantities for staples."""
     client = MealieClient()
     
     print(f"Syncing shopping list for range {start_date_str} to {end_date_str}...")
@@ -372,29 +436,42 @@ def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[]):
     
     ingredients_to_add = []
     staples = client.get_shopping_list_items(STAPLES_LIST_ID)
-    staple_id_map = {item['id']: item['note'] for item in staples}
     
-    # Process low staples
+    # Normalise low staples IDs for comparison
+    low_staple_cleaned_ids = [s_id.replace('-', '') for s_id in low_staples_ids]
+    
+    # We maintain a set of added items (lowercase name/note) to prevent duplication
+    added_items = set()
+    
+    # 1. Process manually checked low staples
     for s_id in low_staples_ids:
-        # Strip dashes to compare if needed
         s_id_clean = s_id.replace('-', '')
-        note = None
+        matched_staple = None
         for item in staples:
             item_id_clean = item['id'].replace('-', '')
             if item_id_clean == s_id_clean:
-                note = item['note']
+                matched_staple = item
                 break
-        if note:
-            note_tagged = tag_dirty_dozen(note)
+                
+        if matched_staple:
+            note = matched_staple['note']
+            clean_name = clean_staple_name(note)
+            
+            # Prevent duplicates
+            if clean_name.lower() in added_items:
+                continue
+                
+            note_tagged = tag_dirty_dozen(clean_name)
             ingredients_to_add.append({
                 "shoppingListId": ACTIVE_LIST_ID,
                 "note": note_tagged,
                 "display": note_tagged,
                 "checked": False,
-                "quantity": 1
+                "quantity": 0.0  # Setting quantity to 0.0 hides quantity in Mealie's UI
             })
+            added_items.add(clean_name.lower())
             
-    # Process recipe ingredients
+    # 2. Process recipe ingredients
     for plan in meal_plans:
         if plan['entryType'] == 'dinner' and plan.get('recipeId'):
             try:
@@ -403,28 +480,40 @@ def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[]):
                 for ing in recipe_ingredients:
                     note = ing.get('display') or ing.get('note')
                     if note:
-                        is_staple = False
-                        note_lower = note.lower()
-                        for s_item in staples:
-                            s_note_lower = s_item['note'].lower()
-                            # Skip if it is a staple that is NOT low
-                            if s_note_lower in note_lower or note_lower in s_note_lower:
-                                s_item_id_clean = s_item['id'].replace('-', '')
-                                low_staple_cleaned_ids = [i.replace('-', '') for i in low_staples_ids]
-                                if s_item_id_clean not in low_staple_cleaned_ids:
-                                    is_staple = True
-                                    break
-                        if is_staple:
+                        # Check if this ingredient matches any staple
+                        matched_s_item = find_matching_staple(note, staples)
+                        
+                        if matched_s_item:
+                            # It is a staple. Check if it is marked as low
+                            s_item_id_clean = matched_s_item['id'].replace('-', '')
+                            if s_item_id_clean in low_staple_cleaned_ids:
+                                # It is low! We want to add it, but using the clean amount-free name
+                                clean_name = clean_staple_name(matched_s_item['note'])
+                                if clean_name.lower() not in added_items:
+                                    note_tagged = tag_dirty_dozen(clean_name)
+                                    ingredients_to_add.append({
+                                        "shoppingListId": ACTIVE_LIST_ID,
+                                        "note": note_tagged,
+                                        "display": note_tagged,
+                                        "checked": False,
+                                        "quantity": 0.0  # 0.0 quantity for clean display
+                                    })
+                                    added_items.add(clean_name.lower())
+                            # If it is NOT marked as low, we skip adding it entirely (stock is sufficient)
                             continue
-                            
+                        
+                        # It is NOT a staple, so we add it as a normal ingredient with its original quantities
                         note_tagged = tag_dirty_dozen(note)
-                        ingredients_to_add.append({
-                            "shoppingListId": ACTIVE_LIST_ID,
-                            "note": note_tagged,
-                            "display": note_tagged,
-                            "checked": False,
-                            "quantity": 1
-                        })
+                        # Avoid duplicates for identical recipe ingredients
+                        if note_tagged.lower() not in added_items:
+                            ingredients_to_add.append({
+                                "shoppingListId": ACTIVE_LIST_ID,
+                                "note": note_tagged,
+                                "display": note_tagged,
+                                "checked": False,
+                                "quantity": 1.0
+                            })
+                            added_items.add(note_tagged.lower())
             except Exception as e:
                 print(f"Error fetching recipe ingredients for {plan['recipeId']}: {e}")
                 
