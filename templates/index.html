@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mealie Planner Companion</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-base: #0B0F19;
+            --bg-surface: rgba(22, 30, 49, 0.75);
+            --bg-surface-glow: rgba(30, 41, 69, 0.9);
+            --border-glow: rgba(255, 255, 255, 0.08);
+            
+            --color-primary: #E58325; /* Amber Blackstone */
+            --color-success: #10B981; /* Emerald Healthy Veg */
+            --color-info: #3B82F6;
+            --color-danger: #EF4444;
+            --color-purple: #8B5CF6; /* Fiber */
+            
+            --text-main: #F3F4F6;
+            --text-muted: #9CA3AF;
+            --text-glow: #ffffff;
+            
+            --font-display: 'Outfit', sans-serif;
+            --font-body: 'Inter', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(229, 131, 37, 0.05) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.05) 0px, transparent 50%),
+                radial-gradient(at 50% 100%, rgba(59, 130, 246, 0.03) 0px, transparent 50%);
+            background-attachment: fixed;
+            font-family: var(--font-body);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Header Style */
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        header h1 {
+            font-family: var(--font-display);
+            font-size: 2.8rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #FFF 30%, var(--color-primary) 70%, var(--color-success) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.03em;
+        }
+
+        header p {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            font-weight: 300;
+        }
+
+        header .badge {
+            display: inline-block;
+            background: rgba(229, 131, 37, 0.15);
+            border: 1px solid rgba(229, 131, 37, 0.3);
+            color: var(--color-primary);
+            padding: 0.3rem 0.8rem;
+            border-radius: 99px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-top: 1rem;
+        }
+
+        /* Glass Cards */
+        .card {
+            background: var(--bg-surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glow);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            margin-bottom: 2rem;
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .card-title {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-glow);
+        }
+
+        /* Alert notifications */
+        .alert {
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            animation: fadeIn 0.5s ease;
+        }
+        .alert-success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            color: #A7F3D0;
+        }
+        .alert-info {
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            color: #BFDBFE;
+        }
+        .alert-warning {
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            color: #FDE68A;
+        }
+
+        /* Grid Layouts */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1.6fr 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 968px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Interactive Form Elements */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            font-family: var(--font-display);
+            font-size: 1rem;
+            font-weight: 500;
+            margin-bottom: 0.75rem;
+            color: var(--text-glow);
+        }
+
+        .exclude-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .checkbox-btn {
+            position: relative;
+        }
+
+        .checkbox-btn input {
+            position: absolute;
+            opacity: 0;
+            cursor: pointer;
+            height: 0;
+            width: 0;
+        }
+
+        .checkbox-label {
+            display: block;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-glow);
+            padding: 0.75rem;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.25s ease;
+            user-select: none;
+        }
+
+        .checkbox-btn input:checked + .checkbox-label {
+            background: rgba(229, 131, 37, 0.15);
+            border-color: var(--color-primary);
+            color: var(--color-primary);
+            box-shadow: 0 0 15px rgba(229, 131, 37, 0.1);
+        }
+
+        .checkbox-btn input:checked + .checkbox-label.success {
+            background: rgba(16, 185, 129, 0.15);
+            border-color: var(--color-success);
+            color: var(--color-success);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
+        }
+
+        .textarea-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-glow);
+            border-radius: 10px;
+            color: var(--text-main);
+            padding: 1rem;
+            font-family: var(--font-body);
+            font-size: 0.95rem;
+            resize: vertical;
+            min-height: 100px;
+            transition: border-color 0.25s ease;
+        }
+
+        .textarea-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+
+        /* Staples Checklist styling */
+        .staples-checklist {
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid var(--border-glow);
+            border-radius: 10px;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        .staple-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+        .staple-row:last-child {
+            border-bottom: none;
+        }
+
+        .custom-checkbox {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+            accent-color: var(--color-primary);
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 1rem;
+            padding: 0.85rem 2rem;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            text-align: center;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--color-primary) 0%, #F59E0B 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(229, 131, 37, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(229, 131, 37, 0.4);
+            filter: brightness(1.1);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-glow);
+            color: var(--text-main);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Calendar View styling */
+        .calendar-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .calendar-table th, .calendar-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .calendar-table th {
+            font-family: var(--font-display);
+            font-weight: 600;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        .calendar-table td {
+            font-size: 0.95rem;
+        }
+
+        .day-name {
+            font-family: var(--font-display);
+            font-weight: 700;
+            color: var(--text-glow);
+            font-size: 1.1rem;
+        }
+
+        .meal-desc {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        /* Styling for meal updates */
+        .select-recipe {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            color: var(--text-main);
+            padding: 0.4rem;
+            font-size: 0.85rem;
+            width: 100%;
+            max-width: 250px;
+            cursor: pointer;
+        }
+
+        .select-recipe option {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+        }
+
+        /* Shopping List View */
+        .shopping-list-container {
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+
+        .shopping-item {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-glow);
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+
+        .organic-pill {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--color-success);
+            padding: 0.15rem 0.5rem;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* Nutrition Analysis styling */
+        .nutrition-row {
+            margin-bottom: 1.25rem;
+        }
+
+        .nutrition-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .nutrient-name {
+            font-weight: 500;
+        }
+
+        .nutrient-value {
+            color: var(--text-muted);
+        }
+
+        .progress-bar-bg {
+            background: rgba(255, 255, 255, 0.05);
+            height: 8px;
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.8s ease-out;
+        }
+
+        .bg-calories { background: var(--color-info); }
+        .bg-protein { background: var(--color-primary); }
+        .bg-carbs { background: #F59E0B; }
+        .bg-fat { background: #14B8A6; }
+        .bg-fiber { background: var(--color-purple); }
+        .bg-sodium { background: var(--color-danger); }
+        .bg-sugar { background: #EC4899; }
+        .bg-cholesterol { background: #64748B; }
+
+        /* Animation frames */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        
+        <!-- Header -->
+        <header>
+            <h1>MEALIE PLANNER COMPANION</h1>
+            <p>Intelligent, healthy, and organic meal coordinator for your family</p>
+            {% if is_submitted %}
+                <span class="badge">Active Planning Week ({% if start_date %}{{ start_date }}{% endif %} to {% if end_date %}{{ end_date }}{% endif %})</span>
+            {% else %}
+                <span class="badge warning">Needs Plan Submission</span>
+            {% endif %}
+        </header>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }}">
+                  <span>{{ message }}</span>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% if not is_submitted %}
+        <!-- STATE A: QUESTIONNAIRE FORM -->
+        <div class="card" style="max-width: 800px; margin: 0 auto;">
+            <div class="card-title">
+                📋 Saturday Meal Questionnaire
+            </div>
+            
+            <form action="{{ url_for('plan') }}" method="POST">
+                
+                <!-- Exclude Days -->
+                <div class="form-group">
+                    <label class="form-label">Days Eating Out (Dinner NOT required)</label>
+                    <div class="exclude-grid">
+                        {% for day in ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] %}
+                        <div class="checkbox-btn">
+                            <input type="checkbox" name="exclude_days" value="{{ day }}" id="exclude_{{ day }}">
+                            <label class="checkbox-label" for="exclude_{{ day }}">{{ day }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Freezer Items -->
+                <div class="form-group" style="margin-top: 2rem;">
+                    <label class="form-label" for="freezer_items">Freezer items to use up this week</label>
+                    <textarea class="textarea-input" id="freezer_items" name="freezer_items" placeholder="e.g. broccoli, frozen peas..."></textarea>
+                </div>
+
+                <!-- Special Requests -->
+                <div class="form-group" style="margin-top: 2rem;">
+                    <label class="form-label" for="special_requests">Special Requests / Themes for the week</label>
+                    <textarea class="textarea-input" id="special_requests" name="special_requests" placeholder="e.g. Mexican night, pasta, soup, want burgers..."></textarea>
+                </div>
+
+                <!-- Low Staples Checklist -->
+                <div class="form-group" style="margin-top: 2rem;">
+                    <label class="form-label">Check Staples running low (Add to shopping list)</label>
+                    <div class="staples-checklist">
+                        {% if staples %}
+                            {% for item in staples %}
+                            <div class="staple-row">
+                                <input type="checkbox" name="low_staples" value="{{ item.id }}" class="custom-checkbox" id="staple_{{ item.id }}">
+                                <label style="cursor: pointer; font-size: 0.9rem;" for="staple_{{ item.id }}">{{ item.note }}</label>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p style="color: var(--text-muted); font-size: 0.9rem; font-style: italic;">No staples found in Mealie Staples list.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div style="text-align: right; margin-top: 2.5rem;">
+                    <button type="submit" class="btn btn-primary">Generate Weekly Plan</button>
+                </div>
+            </form>
+        </div>
+
+        {% else %}
+        
+        <!-- STATE B: ACTIVE WEEK DASHBOARD -->
+        
+        <!-- Blackstone and Prep suggestions -->
+        {% if blackstone_tips %}
+            {% for tip in blackstone_tips %}
+            <div class="alert alert-info">
+                <span>{{ tip | safe }}</span>
+            </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="dashboard-grid">
+            
+            <!-- Column 1: Weekly Calendar & Controls -->
+            <div>
+                <div class="card">
+                    <div class="card-title">
+                        📅 Weekly Menu Calendar
+                    </div>
+                    
+                    <table class="calendar-table">
+                        <thead>
+                            <tr>
+                                <th>Day</th>
+                                <th>Meals</th>
+                                <th>Modify Dinner</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set day_order = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] %}
+                            {% for day in day_order %}
+                                {% set meals = {'breakfast': 'Staples', 'lunch': 'Leftovers', 'dinner': 'Eating Out'} %}
+                                {% set dinner_entry = [] %}
+                                
+                                {% for item in meal_plans %}
+                                    <!-- Parse day name -->
+                                    {% set item_day = item.date | select_day_name %}
+                                    {% if item_day == day %}
+                                        {% if item.entryType == 'breakfast' %}
+                                            {% set _ = meals.update({'breakfast': item.title}) %}
+                                        {% elif item.entryType == 'lunch' %}
+                                            {% set _ = meals.update({'lunch': item.title}) %}
+                                        {% elif item.entryType == 'dinner' %}
+                                            {% if item.recipeId %}
+                                                {% set _ = meals.update({'dinner': item.recipe.name}) %}
+                                                {% set _ = dinner_entry.append(item) %}
+                                            {% elif item.title %}
+                                                {% set _ = meals.update({'dinner': item.title}) %}
+                                                {% set _ = dinner_entry.append(item) %}
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                <tr>
+                                    <td>
+                                        <div class="day-name">{{ day }}</div>
+                                        <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                            {% for item in meal_plans %}
+                                                {% if item.date | select_day_name == day and loop.first %}
+                                                    {{ item.date }}
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="meal-desc">☕ <strong>B:</strong> {{ meals.breakfast }}</div>
+                                        <div class="meal-desc">🥗 <strong>L:</strong> {{ meals.lunch }}</div>
+                                        <div class="meal-desc" style="color: var(--color-primary); font-weight: 500; font-size: 0.95rem; margin-top: 0.25rem;">
+                                            🥘 <strong>D:</strong> {{ meals.dinner }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if dinner_entry %}
+                                            <form action="{{ url_for('change_meal') }}" method="POST">
+                                                <input type="hidden" name="date" value="{{ dinner_entry[0].date }}">
+                                                <input type="hidden" name="entry_id" value="{{ dinner_entry[0].id }}">
+                                                <select name="recipe_id" class="select-recipe" onchange="this.form.submit()">
+                                                    <option value="">-- Swap Dinner Recipe --</option>
+                                                    {% for rec in all_recipes %}
+                                                        <option value="{{ rec.id }}" {% if rec.id == dinner_entry[0].recipeId %}selected{% endif %}>
+                                                            {{ rec.name }}
+                                                        </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </form>
+                                        {% else %}
+                                            <span style="color: var(--text-muted); font-size: 0.85rem;">No active dinner</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        ⚙️ Planner Controls
+                    </div>
+                    <div style="display: flex; gap: 1rem;">
+                        <form action="{{ url_for('sync') }}" method="POST">
+                            <button type="submit" class="btn btn-secondary">🔄 Recalculate Shopping List</button>
+                        </form>
+                        
+                        <!-- Regenerate button links back to questionnaire -->
+                        <form action="{{ url_for('index') }}" method="GET">
+                            <!-- We can simulate not submitted by sending a query param or doing something else, but here we can just clear Mealie calendar to show Q/A again. Let's make a quick prompt to let them re-fill -->
+                            <a href="https://mealie.cosmoslab.dev" target="_blank" class="btn btn-secondary">🌐 Open Mealie UI</a>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Column 2: Shopping List & Nutrition -->
+            <div>
+                <!-- Nutrition Analysis Card -->
+                <div class="card">
+                    <div class="card-title">
+                        📊 Nutrition Forecast
+                    </div>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: -1rem; margin-bottom: 1.5rem;">
+                        Family daily averages compared to Recommended Daily Allowances (RDAs)
+                    </p>
+                    
+                    {% for key, rda_val in rda.items() %}
+                        {% set avg = averages.get(key, 0.0) %}
+                        {% set pct = ((avg / rda_val) * 100) | round | int if rda_val > 0 else 0 %}
+                        {% set unit = 'g' %}
+                        {% if key == 'calories' %}{% set unit = 'kcal' %}{% elif key in ['sodium', 'cholesterol'] %}{% set unit = 'mg' %}{% endif %}
+                        
+                        <div class="nutrition-row">
+                            <div class="nutrition-header">
+                                <span class="nutrient-name" style="text-transform: capitalize;">{{ key }}</span>
+                                <span class="nutrient-value">
+                                    <strong>{{ avg }}</strong> / {{ rda_val }} {{ unit }} ({{ pct }}%)
+                                </span>
+                            </div>
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill bg-{{ key }}" style="width: {% if pct > 100 %}100{% else %}{{ pct }}{% endif %}%;"></div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Shopping List Card -->
+                <div class="card">
+                    <div class="card-title">
+                        🛒 Active Shopping List (Preview)
+                    </div>
+                    <div class="shopping-list-container">
+                        {% if shopping_list %}
+                            {% for item in shopping_list %}
+                            <div class="shopping-item">
+                                <span>
+                                    {% if item.checked %}
+                                        <del style="color: var(--text-muted);">{{ item.note }}</del>
+                                    {% else %}
+                                        {{ item.note }}
+                                    {% endif %}
+                                </span>
+                                {% if "buy organic" in item.note.lower() %}
+                                    <span class="organic-pill">Organic</span>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p style="color: var(--text-muted); font-size: 0.9rem; font-style: italic;">No items currently in active shopping list.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        {% endif %}
+
+    </div>
+</body>
+</html>

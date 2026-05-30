@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  mealie-planner:
+    build: .
+    container_name: mealie-planner
+    restart: always
+    ports:
+      - "9926:9926"
+    volumes:
+      - mealie_mealie-data:/mealie-data:ro
+    env_file:
+      - .env
+    networks:
+      - mealie_default
+
+volumes:
+  mealie_mealie-data:
+    external: true
+
+networks:
+  mealie_default:
+    external: true
