@@ -423,29 +423,28 @@ def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[], progres
             item['_cleaned_name'] = cleaned_name
             staple_lookup[cleaned_name.lower()] = item
             
-        ingredients_to_add = []
-        added_items = set() # lowercase note of items added to prevent duplicates
+        ingredients_to_add = {} # cleaned_name_lower -> item_dict
         
-        def add_to_list(name):
+        def add_to_list(name, quantity=1.0):
             cleaned = name.strip()
             cleaned_lower = cleaned.lower()
-            if cleaned_lower not in added_items:
-                # Apply Dirty Dozen (Buy Organic) tagging
+            if cleaned_lower in ingredients_to_add:
+                ingredients_to_add[cleaned_lower]['quantity'] += quantity
+            else:
                 tagged = tag_dirty_dozen(cleaned)
-                ingredients_to_add.append({
+                ingredients_to_add[cleaned_lower] = {
                     "shoppingListId": ACTIVE_LIST_ID,
                     "note": tagged,
-                    "quantity": 0.0,
+                    "quantity": quantity,
                     "checked": False
-                })
-                added_items.add(cleaned_lower)
+                }
                 
         # 3. Process manually marked low staples first
         for item in staples:
             clean_id = item['id'].replace('-', '')
             if clean_id in low_ids_clean:
                 cleaned_name = item.get('_cleaned_name', item['note'])
-                add_to_list(cleaned_name)
+                add_to_list(cleaned_name, quantity=1.0)
                 
         # 4. Fetch details of all recipes in the meal plan to extract ingredients
         if progress_callback:
@@ -471,7 +470,8 @@ def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[], progres
                             ing_text = ing.get('display') or ing.get('originalText') or ""
                         ing_text = ing_text.strip()
                         if ing_text:
-                            recipe_ings.append(ing_text)
+                            qty = ing.get('quantity') or 1.0
+                            recipe_ings.append((ing_text, qty))
                             raw_ing_texts.append(ing_text)
                     recipe_ingredients_by_dinner.append((p, recipe_ings))
                 except Exception as e:
@@ -485,7 +485,7 @@ def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[], progres
         
         # 6. Reconcile dinner recipe ingredients
         for p, recipe_ings in recipe_ingredients_by_dinner:
-            for raw_ing in recipe_ings:
+            for raw_ing, qty in recipe_ings:
                 cleaned_name = cleaned_ing_map.get(raw_ing, raw_ing).strip()
                 cleaned_name_lower = cleaned_name.lower()
                 
@@ -503,11 +503,13 @@ def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[], progres
                     # If it is a staple, only add it if it was manually marked as low
                     clean_staple_id = matched_staple['id'].replace('-', '')
                     if clean_staple_id in low_ids_clean:
-                        add_to_list(matched_staple.get('_cleaned_name', matched_staple['note']))
+                        add_to_list(matched_staple.get('_cleaned_name', matched_staple['note']), quantity=1.0)
                 else:
-                    # If it is not a staple, always add it
-                    add_to_list(cleaned_name)
+                    # If it is not a staple, always add it with its recipe quantity!
+                    add_to_list(cleaned_name, quantity=qty)
                     
+        ingredients_list = list(ingredients_to_add.values())
+
         # 7. Clear the active list and add new items
         if progress_callback:
             progress_callback("Clearing active shopping list in Mealie...", 98)
@@ -515,11 +517,11 @@ def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[], progres
         client.clear_shopping_list(ACTIVE_LIST_ID)
         
         if progress_callback:
-            progress_callback(f"Bulk adding {len(ingredients_to_add)} items to active shopping list...", 99)
-        print(f"Adding {len(ingredients_to_add)} items in bulk to active shopping list...")
-        client.add_shopping_list_items_bulk(ingredients_to_add)
+            progress_callback(f"Bulk adding {len(ingredients_list)} items to active shopping list...", 99)
+        print(f"Adding {len(ingredients_list)} items in bulk to active shopping list...")
+        client.add_shopping_list_items_bulk(ingredients_list)
         
-        print(f"Programmatic shopping list sync completed successfully. Added {len(ingredients_to_add)} items.")
+        print(f"Programmatic shopping list sync completed successfully. Added {len(ingredients_list)} items.")
         if progress_callback:
             progress_callback("Shopping list synchronization complete!", 100)
         return True
