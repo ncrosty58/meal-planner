@@ -487,17 +487,10 @@
             
             <form action="{{ url_for('plan') }}" method="POST">
                 
-                <!-- Exclude Days -->
+                <!-- Opt Out of Meals -->
                 <div class="form-group">
-                    <label class="form-label">Days Eating Out (Dinner NOT required)</label>
-                    <div class="exclude-grid">
-                        {% for day in ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] %}
-                        <div class="checkbox-btn">
-                            <input type="checkbox" name="exclude_days" value="{{ day }}" id="exclude_{{ day }}">
-                            <label class="checkbox-label" for="exclude_{{ day }}">{{ day }}</label>
-                        </div>
-                        {% endfor %}
-                    </div>
+                    <label class="form-label" for="exclude_text">Opt Out of Meals (Breakfast, Lunch, or Dinner)</label>
+                    <textarea class="textarea-input" id="exclude_text" name="exclude_text" placeholder="e.g. Skip dinner on Monday and Tuesday, no breakfast on Friday, out for Saturday lunch..."></textarea>
                 </div>
 
                 <!-- Freezer Items -->

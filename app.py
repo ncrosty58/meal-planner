@@ -136,7 +136,7 @@ def index():
 
 @app.route('/plan', methods=['POST'])
 def plan():
-    exclude_days = request.form.getlist('exclude_days')
+    exclude_text = request.form.get('exclude_text', '')
     freezer_items = request.form.get('freezer_items', '')
     special_requests = request.form.get('special_requests', '')
     low_staples_ids = request.form.getlist('low_staples')
@@ -150,14 +150,14 @@ def plan():
         generate_weekly_plan(
             start_date_str=start_date_str,
             end_date_str=end_date_str,
-            exclude_days=exclude_days,
+            exclude_text=exclude_text,
             freezer_items=freezer_items,
             special_requests=special_requests,
             low_staples_ids=low_staples_ids
         )
         
         # Send out the Saturday report email
-        send_saturday_report_email(start_date_str, end_date_str, exclude_days, freezer_items, low_staples_ids, special_requests)
+        send_saturday_report_email(start_date_str, end_date_str, exclude_text, freezer_items, low_staples_ids, special_requests)
         flash("Successfully generated weekly plan and updated active shopping list!", "success")
     except Exception as e:
         flash(f"Error generating plan: {str(e)}", "danger")
@@ -249,7 +249,7 @@ def send_saturday_qa_email_job():
     return send_email("📋 Weekly Meal Planning Questionnaire", html)
 
 
-def send_saturday_report_email(start_date_str, end_date_str, exclude_days, freezer_items, low_staples_ids, special_requests=""):
+def send_saturday_report_email(start_date_str, end_date_str, exclude_text, freezer_items, low_staples_ids, special_requests=""):
     """Send summary of generated meal plan, staples, and weekly average nutrients."""
     client = MealieClient()
     meal_plans = client.get_meal_plan(start_date_str, end_date_str)
@@ -325,7 +325,8 @@ def send_saturday_report_email(start_date_str, end_date_str, exclude_days, freez
     freezer_str = freezer_items if freezer_items else "None specified"
     special_requests_str = special_requests if special_requests else "None"
     staples_str = ", ".join(low_staples_names) if low_staples_names else "None running low"
-
+    exclude_text_str = exclude_text if exclude_text else "None"
+ 
     html = f"""
     <html>
       <body style="font-family: Arial, sans-serif; background-color: #f7f9fc; padding: 20px; color: #333;">
@@ -348,7 +349,7 @@ def send_saturday_report_email(start_date_str, end_date_str, exclude_days, freez
               {meal_rows}
             </tbody>
           </table>
-
+ 
           <h3 style="color: #2F3E46; border-bottom: 2px solid #eee; padding-bottom: 5px; margin-top: 30px;">🥦 Weekly Nutritional Analysis (Family Average)</h3>
           <p style="font-size: 14px; color: #666; margin-top: 0;">Calculated daily average per person, including estimated breakfast staples & leftovers.</p>
           <table style="width: 100%; border-collapse: collapse;">
@@ -364,9 +365,10 @@ def send_saturday_report_email(start_date_str, end_date_str, exclude_days, freez
               {nut_rows}
             </tbody>
           </table>
-
+ 
           <div style="background-color: #e8f5e9; border-left: 4px solid #43A047; padding: 15px; border-radius: 4px; margin-top: 30px; font-size: 14px;">
             <strong>📝 Submission Context:</strong><br/>
+            * <strong>Meal Opt-Outs</strong>: {exclude_text_str}<br/>
             * <strong>Low Staples Added</strong>: {staples_str}<br/>
             * <strong>Freezer Items Checked</strong>: {freezer_str}<br/>
             * <strong>Special Requests</strong>: {special_requests_str}

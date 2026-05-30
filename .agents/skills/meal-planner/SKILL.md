@@ -50,3 +50,15 @@ This skill contains the constraints, business rules, and integration workflows f
 - **Saturday Q/A email**: Sent at 8:00 AM (New York time) to prompt questionnaire completion.
 - **Saturday Report email**: Sent immediately upon questionnaire submission summarizing the plan, shopping list, griddle tips, and weekly nutrition averages.
 - **Daily Reminder email**: Sent Sunday to Friday at 7:00 AM (New York time) containing today's menu, griddle reminders, and macro/micro nutrition totals compared to daily RDAs.
+
+## Free-Text Meal Opt-Outs Parser
+- **Parsing Exclusions**: Parse free-text exclusions (e.g., "Skip dinner Monday and Tuesday, no breakfast Friday, away all weekend") into scheduled meal skips:
+  - **Breakfast**: Set title to "Skipped" (no recipe).
+  - **Lunch**: Set title to "Skipped" (no recipe).
+  - **Dinner**: Set title to "Eating Out" (no recipe).
+- **Supported Heuristics**:
+  - **Day Ranges**: e.g., "Monday to Wednesday", "Friday through Sunday".
+  - **Day Groups**: "weekend" (Saturday/Sunday) and "weekdays" or "workdays" (Monday through Friday).
+  - **All-Meals Keywords**: e.g., "all meals", "every meal", "all day", "whole day", "full day", "everything", "no cooking", "away" to skip breakfast, lunch, and dinner.
+  - **Context Chaining**: Keep context active across clauses (e.g., "dinner Monday, Tuesday and breakfast Wednesday" excludes Monday dinner, Tuesday dinner, and Wednesday breakfast).
+

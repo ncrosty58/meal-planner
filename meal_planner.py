@@ -715,7 +715,124 @@ def get_recipes_from_db():
         except:
             return []
 
-def generate_weekly_plan(start_date_str, end_date_str, exclude_days=[], freezer_items="", special_requests="", low_staples_ids=[]):
+def parse_exclusions(text):
+    """
+    Parse a free text description of meal exclusions and return a dict of:
+    {
+        'Monday': ['dinner'],
+        'Tuesday': ['dinner', 'lunch'],
+        'Friday': ['breakfast']
+    }
+    """
+    exclusions = {}
+    if not text:
+        return exclusions
+        
+    text_lower = text.lower()
+    
+    days_of_week = {
+        'monday': 'Monday', 'tuesday': 'Tuesday', 'wednesday': 'Wednesday',
+        'thursday': 'Thursday', 'friday': 'Friday', 'saturday': 'Saturday', 'sunday': 'Sunday',
+        'mon': 'Monday', 'tue': 'Tuesday', 'wed': 'Wednesday', 'thu': 'Thursday',
+        'fri': 'Friday', 'sat': 'Saturday', 'sun': 'Sunday'
+    }
+    
+    ordered_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    
+    meals_map = {
+        'breakfast': 'breakfast', 'bf': 'breakfast',
+        'lunch': 'lunch', 'ln': 'lunch',
+        'dinner': 'dinner', 'dn': 'dinner'
+    }
+    
+    all_meals_keywords = ['all meals', 'every meal', 'meals', 'all day', 'whole day', 'full day', 'everything', 'no cooking', 'away']
+    
+    triggers = ['skip', 'out', 'no', 'none', 'don\'t', 'dont', 'except', 'exclude', 'without', 'off', 'opt out', 'away', 'not cooking', 'eating out', 'restaurant', 'cancel']
+    
+    # Pre-process day ranges: "X to Y" or "X through Y" or "X thru Y" or "X until Y"
+    day_pattern = r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b'
+    range_regex = day_pattern + r'\s+(?:to|through|thru|until)\s+' + day_pattern
+    
+    def replace_range(match):
+        start_str = match.group(1)
+        end_str = match.group(2)
+        start_day = days_of_week[start_str]
+        end_day = days_of_week[end_str]
+        try:
+            start_idx = ordered_days.index(start_day)
+            end_idx = ordered_days.index(end_day)
+            if start_idx <= end_idx:
+                days = ordered_days[start_idx : end_idx + 1]
+            else:
+                days = ordered_days[start_idx:] + ordered_days[:end_idx + 1]
+            return ", ".join(days)
+        except ValueError:
+            return match.group(0)
+            
+    processed_text = re.sub(range_regex, replace_range, text_lower).lower()
+    
+    # Split text into segments by sentence/clause boundaries
+    # We split by period, semicolon, newline, comma, and the word "and"
+    clauses = re.split(r'[\.,;\n]|\band\b', processed_text)
+    
+    active_meals = ['dinner']  # Default context
+    active_days = []
+    
+    for clause in clauses:
+        clause = clause.strip()
+        if not clause:
+            continue
+            
+        # Check days/groups in this clause
+        clause_days = []
+        
+        # Check weekend/weekdays keywords
+        if 'weekend' in clause:
+            clause_days.extend(['Saturday', 'Sunday'])
+        if 'weekday' in clause or 'workday' in clause or 'work day' in clause:
+            clause_days.extend(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'])
+            
+        for kw, day_name in days_of_week.items():
+            if re.search(r'\b' + re.escape(kw) + r'\b', clause):
+                if day_name not in clause_days:
+                    clause_days.append(day_name)
+                    
+        # Check meals in this clause
+        clause_meals = []
+        
+        # Check if they want all meals
+        wants_all_meals = any(kw in clause for kw in all_meals_keywords)
+        if wants_all_meals:
+            clause_meals = ['breakfast', 'lunch', 'dinner']
+        else:
+            for kw, meal_name in meals_map.items():
+                if re.search(r'\b' + re.escape(kw) + r'\b', clause):
+                    if meal_name not in clause_meals:
+                        clause_meals.append(meal_name)
+                    
+        has_trigger = any(re.search(r'\b' + re.escape(t) + r'\b', clause) for t in triggers)
+        
+        # Update context
+        if clause_meals:
+            active_meals = clause_meals
+        if clause_days:
+            active_days = clause_days
+            
+        # Apply the exclusions
+        # If we have days and either a trigger, a meal, or a day mentioned, apply the exclusions!
+        has_day_mention = any(re.search(r'\b' + re.escape(kw) + r'\b', clause) for kw in days_of_week) or 'weekend' in clause or 'weekday' in clause or 'workday' in clause
+        if active_days and (has_trigger or clause_meals or has_day_mention):
+            for d in active_days:
+                if d not in exclusions:
+                    exclusions[d] = []
+                for m in active_meals:
+                    if m not in exclusions[d]:
+                        exclusions[d].append(m)
+                        
+    return exclusions
+
+
+def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_items="", special_requests="", low_staples_ids=[]):
     """Generate weekly plan using an intelligent rule-based scoring engine, schedule in Mealie, and sync active shopping list."""
     client = MealieClient()
     
@@ -852,17 +969,29 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_days=[], freezer_
     recipe_index = 0
     breakfasts = ["Cereal & Milk", "Toast with Jam", "Bagels & Cream Cheese", "Yogurt with Granola", "English Muffins with Jam"]
     
+    exclusions = parse_exclusions(exclude_text)
+    
     while current_date <= end_date:
         d_str = current_date.strftime("%Y-%m-%d")
         day_name = current_date.strftime("%A")
         
-        # Schedule breakfast and lunch
-        bf = breakfasts[current_date.weekday() % len(breakfasts)]
-        meals.append({"date": d_str, "entryType": "breakfast", "title": bf, "recipeId": None})
-        meals.append({"date": d_str, "entryType": "lunch", "title": "Leftovers", "recipeId": None})
+        day_exclusions = exclusions.get(day_name, [])
+        
+        # Schedule breakfast
+        if 'breakfast' in day_exclusions:
+            meals.append({"date": d_str, "entryType": "breakfast", "title": "Skipped", "recipeId": None})
+        else:
+            bf = breakfasts[current_date.weekday() % len(breakfasts)]
+            meals.append({"date": d_str, "entryType": "breakfast", "title": bf, "recipeId": None})
+            
+        # Schedule lunch
+        if 'lunch' in day_exclusions:
+            meals.append({"date": d_str, "entryType": "lunch", "title": "Skipped", "recipeId": None})
+        else:
+            meals.append({"date": d_str, "entryType": "lunch", "title": "Leftovers", "recipeId": None})
         
         # Schedule dinner
-        if day_name in exclude_days:
+        if 'dinner' in day_exclusions:
             meals.append({"date": d_str, "entryType": "dinner", "title": "Eating Out", "recipeId": None})
         else:
             if recipe_index >= len(clean_recipes):
