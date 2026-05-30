@@ -1,6 +1,10 @@
 ---
 name: meal-planner
 description: Handle meal planning, diet rules, griddle batch cooking, organic tagging, shopping lists, and recipe scraping for the Crosty family Mealie instance.
+family_names: Nathan & Kristin
+timezone: America/New_York
+app_url: https://mealie-planner.cosmoslab.dev
+recipient_emails: nathan@example.com,kristin@example.com
 ---
 
 # Mealie Meal Planner Skill
@@ -35,30 +39,9 @@ This skill contains the constraints, business rules, and integration workflows f
 - When both parents load the planning questionnaire URL (`/`), the app must check if dinner plans are already scheduled in Mealie for the upcoming Saturday-to-Friday week.
 - If plans are found, the questionnaire is hidden and they are redirected to the Active Week Dashboard showing the active calendar and shopping list.
 
-## Scraping & Web Searching
-- If a freezer item is specified and no local recipe exists in Mealie:
-  1. Search DuckDuckGo HTML for recipes. Use query `healthy recipe with {ingredient}` if ingredient contains meat keywords (chicken, turkey, pork, fish, salmon, beef, steak, etc.); otherwise, use `healthy vegetarian recipe with {ingredient}`.
-  2. Attempt to scrape the recipe into Mealie using the Mealie REST API URL import endpoint (`/api/recipes/create/url`).
-  3. Schedule the newly imported recipe.
-
-## Recalculation & List Syncing
-- The `/sync` route recalculates the active shopping list dynamically.
-- Low staples checked in the questionnaire are appended.
-- Ingredients of scheduled recipes are copied over, but any ingredient matching a staple that was *not* marked as running low must be excluded.
-
 ## Communication Schedule
 - **Saturday Q/A email**: Sent at 8:00 AM (New York time) to prompt questionnaire completion.
-- **Saturday Report email**: Sent immediately upon questionnaire submission summarizing the plan, shopping list, griddle tips, and weekly nutrition averages.
+- **Saturday Report email**: Sent immediately upon questionnaire submission summarizing the plan, shopping list, griddle tips, and weekly nutritional averages.
 - **Daily Reminder email**: Sent Sunday to Friday at 7:00 AM (New York time) containing today's menu, griddle reminders, and macro/micro nutrition totals compared to daily RDAs.
 
-## Free-Text Meal Opt-Outs Parser
-- **Parsing Exclusions**: Parse free-text exclusions (e.g., "Skip dinner Monday and Tuesday, no breakfast Friday, away all weekend") into scheduled meal skips:
-  - **Breakfast**: Set title to "Skipped" (no recipe).
-  - **Lunch**: Set title to "Skipped" (no recipe).
-  - **Dinner**: Set title to "Eating Out" (no recipe).
-- **Supported Heuristics**:
-  - **Day Ranges**: e.g., "Monday to Wednesday", "Friday through Sunday".
-  - **Day Groups**: "weekend" (Saturday/Sunday) and "weekdays" or "workdays" (Monday through Friday).
-  - **All-Meals Keywords**: e.g., "all meals", "every meal", "all day", "whole day", "full day", "everything", "no cooking", "away" to skip breakfast, lunch, and dinner.
-  - **Context Chaining**: Keep context active across clauses (e.g., "dinner Monday, Tuesday and breakfast Wednesday" excludes Monday dinner, Tuesday dinner, and Wednesday breakfast).
 

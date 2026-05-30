@@ -1,5 +1,9 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash
+import sys
+import queue
+import threading
+import json
+from flask import Flask, render_template, request, redirect, url_for, flash, Response
 from datetime import datetime, timedelta
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -10,29 +14,20 @@ from meal_planner import (
     sync_shopping_list,
     calculate_nutrition_for_range,
     check_blackstone_compatibility,
-    send_email,
-    RDA,
-    ACTIVE_LIST_ID,
-    STAPLES_LIST_ID
+    send_email
 )
+
+from config import ACTIVE_LIST_ID, STAPLES_LIST_ID, RDA, TIMEZONE, APP_URL, FAMILY_RECIPIENT_EMAILS, FAMILY_NAMES
+from clear_mealie import wipe_mealie_data
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'mealie_companion_secret_9926')
 
 # Helper to calculate the planning week range (starts Saturday, ends next Friday)
 def get_planning_dates():
-    today = datetime.now(pytz.timezone('America/New_York'))
+    today = datetime.now(pytz.timezone(TIMEZONE))
     days_to_saturday = (5 - today.weekday() + 7) % 7
     start_date = today + timedelta(days=days_to_saturday)
-    end_date = start_date + timedelta(days=6)
-    return start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
-
-
-def get_current_week_dates():
-    """Get the active planning week dates (from the most recent Saturday to upcoming Friday)."""
-    today = datetime.now(pytz.timezone('America/New_York'))
-    days_since_saturday = (today.weekday() - 5 + 7) % 7
-    start_date = today - timedelta(days=days_since_saturday)
     end_date = start_date + timedelta(days=6)
     return start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
 
@@ -56,6 +51,13 @@ current_week_low_staples = []
 
 @app.route('/')
 def index():
+    success_msg = request.args.get('success_msg')
+    error_msg = request.args.get('error_msg')
+    if success_msg:
+        flash(success_msg, "success")
+    if error_msg:
+        flash(error_msg, "danger")
+        
     try:
         client = MealieClient()
     except Exception as e:
@@ -121,7 +123,8 @@ def index():
             rda=RDA,
             blackstone_tips=blackstone_tips,
             all_recipes=all_recipes,
-            staples=staples
+            staples=staples,
+            low_staples=current_week_low_staples
         )
     else:
         # NO PLAN YET. Render the QUESTIONNAIRE FORM
@@ -130,8 +133,66 @@ def index():
             is_submitted=False,
             start_date=start_date_str,
             end_date=end_date_str,
-            staples=staples
+            staples=staples,
+            low_staples=current_week_low_staples
         )
+
+
+@app.route('/plan-stream')
+def plan_stream():
+    exclude_text = request.args.get('exclude_text', '')
+    freezer_items = request.args.get('freezer_items', '')
+    special_requests = request.args.get('special_requests', '')
+    low_staples_ids = request.args.getlist('low_staples')
+    
+    q = queue.Queue()
+    start_date_str, end_date_str = get_planning_dates()
+    
+    global current_week_low_staples
+    current_week_low_staples = low_staples_ids
+    
+    def worker():
+        try:
+            def callback(msg, pct):
+                q.put({"type": "progress", "message": msg, "progress": pct})
+                
+            generate_weekly_plan(
+                start_date_str=start_date_str,
+                end_date_str=end_date_str,
+                exclude_text=exclude_text,
+                freezer_items=freezer_items,
+                special_requests=special_requests,
+                low_staples_ids=low_staples_ids,
+                progress_callback=callback
+            )
+            
+            # Send Saturday report email
+            callback("Sending weekly plan report email to family...", 99)
+            send_saturday_report_email(start_date_str, end_date_str, exclude_text, freezer_items, low_staples_ids, special_requests)
+            
+            q.put({"type": "complete"})
+        except Exception as e:
+            q.put({"type": "error", "message": str(e)})
+            
+    threading.Thread(target=worker).start()
+    
+    def generate():
+        while True:
+            try:
+                item = q.get(timeout=180) # 3 mins timeout
+                if item["type"] == "complete":
+                    yield f"data: {json.dumps({'status': 'complete', 'progress': 100})}\n\n"
+                    break
+                elif item["type"] == "error":
+                    yield f"data: {json.dumps({'status': 'error', 'message': item['message']})}\n\n"
+                    break
+                elif item["type"] == "progress":
+                    yield f"data: {json.dumps({'status': item['message'], 'progress': item['progress']})}\n\n"
+            except queue.Empty:
+                yield f"data: {json.dumps({'status': 'error', 'message': 'Plan generation timed out.'})}\n\n"
+                break
+                
+    return Response(generate(), mimetype='text/event-stream')
 
 
 @app.route('/plan', methods=['POST'])
@@ -170,12 +231,27 @@ def sync():
     start_date_str, end_date_str = get_planning_dates()
     global current_week_low_staples
     
+    # Update low staples from POST form parameter if available
+    low_staples_ids = request.form.getlist('low_staples')
+    if low_staples_ids or request.form.get('staples_submitted') == '1':
+        current_week_low_staples = low_staples_ids
+        
     try:
         sync_shopping_list(start_date_str, end_date_str, current_week_low_staples)
         flash("Recalculated active shopping list successfully!", "success")
     except Exception as e:
         flash(f"Error syncing shopping list: {str(e)}", "danger")
         
+    return redirect(url_for('index'))
+
+
+@app.route('/clear', methods=['POST'])
+def clear_plan_route():
+    try:
+        wipe_mealie_data()
+        flash("Successfully cleared meal plans and active shopping list from Mealie!", "success")
+    except Exception as e:
+        flash(f"Error clearing Mealie data: {str(e)}", "danger")
     return redirect(url_for('index'))
 
 
@@ -226,14 +302,14 @@ def trigger_daily():
 
 def send_saturday_qa_email_job():
     """Job to email Saturday Questionnaire link to family."""
-    app_url = "https://mealie-planner.cosmoslab.dev"
+    app_url = APP_URL
     
     html = f"""
     <html>
       <body style="font-family: Arial, sans-serif; background-color: #f7f9fc; padding: 20px; color: #333;">
         <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #e1e8ed;">
           <h2 style="color: #E58325; margin-top: 0; text-align: center;">📋 Weekly Meal Planning Questionnaire</h2>
-          <p style="font-size: 16px; line-height: 1.6;">Hi Nathan & Kristin,</p>
+          <p style="font-size: 16px; line-height: 1.6;">Hi {FAMILY_NAMES},</p>
           <p style="font-size: 16px; line-height: 1.6;">It is Saturday, which means it is time to plan meals and shop for the upcoming week!</p>
           <p style="font-size: 16px; line-height: 1.6;">Please click the button below to fill out the questionnaire (choose eating-out days, freezer items, and check off running-low staples):</p>
           
@@ -375,7 +451,7 @@ def send_saturday_report_email(start_date_str, end_date_str, exclude_text, freez
           </div>
 
           <p style="font-size: 14px; color: #888; text-align: center; margin-top: 30px;">
-            Need to change something? Go to <a href="https://mealie-planner.cosmoslab.dev" style="color: #E58325;">Your Dashboard</a> to edit dates, swap dinners, and sync your list instantly.
+            Need to change something? Go to <a href="{APP_URL}" style="color: #E58325;">Your Dashboard</a> to edit dates, swap dinners, and sync your list instantly.
           </p>
         </div>
       </body>
@@ -387,7 +463,7 @@ def send_saturday_report_email(start_date_str, end_date_str, exclude_text, freez
 def send_daily_reminder_job():
     """Job to email daily meal reminders to family at 7:00 AM."""
     client = MealieClient()
-    today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d")
+    today_str = datetime.now(pytz.timezone(TIMEZONE)).strftime("%Y-%m-%d")
     
     # Fetch meal plans for today
     plans = client.get_meal_plan(today_str, today_str)
@@ -467,10 +543,16 @@ def send_daily_reminder_job():
     return send_email(f"🍽️ Today's Meal Plan: {dn_title} ({day_name})", html)
 
 
+
+@app.route('/debug-recipes')
+def debug_recipes_route():
+    recipes = meal_planner.get_recipes_from_db()
+    return str(recipes), 200
+
 # --- Scheduler Setup ---
 
 def start_scheduler():
-    scheduler = BackgroundScheduler(timezone=pytz.timezone('America/New_York'))
+    scheduler = BackgroundScheduler(timezone=pytz.timezone(TIMEZONE))
     
     # 1. Daily reminders: Sunday to Friday at 7:00 AM (New York time)
     scheduler.add_job(

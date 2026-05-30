@@ -143,6 +143,39 @@
             line-height: 1.5;
         }
 
+        .progress-bar-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            margin: 1.2rem 0;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--color-primary) 0%, #F59E0B 100%);
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+
+        .loading-log {
+            width: 100%;
+            height: 140px;
+            overflow-y: auto;
+            background: rgba(10, 15, 25, 0.8);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 0.75rem;
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: #34D399;
+            text-align: left;
+            margin-top: 1rem;
+            white-space: pre-wrap;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.7);
+        }
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -362,6 +395,91 @@
             border-color: rgba(255, 255, 255, 0.2);
         }
 
+        .btn-danger {
+            background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+            filter: brightness(1.1);
+        }
+
+        /* Modal Backdrop */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(11, 15, 25, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            z-index: 999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Modal Dialog Box */
+        .modal-content {
+            background: rgba(22, 30, 49, 0.95);
+            border: 1px solid var(--border-glow);
+            border-radius: 20px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+            width: 90%;
+            max-width: 550px;
+            padding: 2.5rem;
+            position: relative;
+            animation: scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Close Button */
+        .close-btn {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            font-size: 2rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: color 0.2s;
+            line-height: 1;
+        }
+
+        .close-btn:hover {
+            color: var(--text-main);
+        }
+
+        /* Checklist container inside Modal */
+        .staples-checklist-container {
+            max-height: 350px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 0.75rem;
+            padding: 1rem;
+            background: rgba(10, 15, 25, 0.4);
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            margin-top: 0.5rem;
+        }
+        
+        .staple-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        
+        .staple-row:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
         /* Calendar View styling */
         .calendar-table {
             width: 100%;
@@ -522,11 +640,8 @@
         <!-- Header -->
         <header>
             <h1>MEALIE PLANNER COMPANION</h1>
-            <p>Intelligent, healthy, and organic meal coordinator for your family</p>
             {% if is_submitted %}
                 <span class="badge">Active Planning Week ({% if start_date %}{{ start_date }}{% endif %} to {% if end_date %}{{ end_date }}{% endif %})</span>
-            {% else %}
-                <span class="badge warning">Needs Plan Submission</span>
             {% endif %}
         </header>
 
@@ -566,23 +681,6 @@
                 <div class="form-group" style="margin-top: 2rem;">
                     <label class="form-label" for="special_requests">Special Requests / Themes for the week</label>
                     <textarea class="textarea-input" id="special_requests" name="special_requests" placeholder="e.g. Mexican night, pasta, soup, want burgers..."></textarea>
-                </div>
-
-                <!-- Low Staples Checklist -->
-                <div class="form-group" style="margin-top: 2rem;">
-                    <label class="form-label">Check Staples running low (Add to shopping list)</label>
-                    <div class="staples-checklist">
-                        {% if staples %}
-                            {% for item in staples %}
-                            <div class="staple-row">
-                                <input type="checkbox" name="low_staples" value="{{ item.id }}" class="custom-checkbox" id="staple_{{ item.id }}">
-                                <label style="cursor: pointer; font-size: 0.9rem;" for="staple_{{ item.id }}">{{ item.note }}</label>
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                            <p style="color: var(--text-muted); font-size: 0.9rem; font-style: italic;">No staples found in Mealie Staples list.</p>
-                        {% endif %}
-                    </div>
                 </div>
 
                 <div style="text-align: right; margin-top: 2.5rem;">
@@ -693,16 +791,18 @@
                     <div class="card-title">
                         ⚙️ Planner Controls
                     </div>
-                    <div style="display: flex; gap: 1rem;">
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-secondary" onclick="openStaplesModal()">📋 Manage Staples</button>
+
                         <form action="{{ url_for('sync') }}" method="POST">
                             <button type="submit" class="btn btn-secondary">🔄 Recalculate Shopping List</button>
                         </form>
                         
-                        <!-- Regenerate button links back to questionnaire -->
-                        <form action="{{ url_for('index') }}" method="GET">
-                            <!-- We can simulate not submitted by sending a query param or doing something else, but here we can just clear Mealie calendar to show Q/A again. Let's make a quick prompt to let them re-fill -->
-                            <a href="https://mealie.cosmoslab.dev" target="_blank" class="btn btn-secondary">🌐 Open Mealie UI</a>
+                        <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('Are you sure you want to clear the active shopping list and all scheduled meal plans for the current and next weeks?');">
+                            <button type="submit" class="btn btn-danger">🗑️ Clear & Reset Plan</button>
                         </form>
+
+                        <a href="https://mealie.cosmoslab.dev" target="_blank" class="btn btn-secondary">🌐 Open Mealie UI</a>
                     </div>
                 </div>
             </div>
@@ -774,24 +874,74 @@
         <div class="loading-spinner-container">
             <div class="loading-spinner"></div>
             <div class="loading-text" id="loading-text">Generating Weekly Plan...</div>
-            <div class="loading-subtext">Please do not close or leave this page. Your shopping list is being recalculated.</div>
+            
+            <div class="progress-bar-container" id="progress-bar-container" style="display: none;">
+                <div class="progress-bar-fill" id="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+            
+            <div class="loading-subtext" id="loading-subtext">Please do not close or leave this page. Your shopping list is being recalculated.</div>
+            
+            <div class="loading-log" id="loading-log" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Staples Modal HTML -->
+    <div id="staples-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeStaplesModal()">&times;</span>
+            <h2 style="font-family: var(--font-display); color: var(--text-glow); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                📋 Manage Staples Running Low
+            </h2>
+            <form action="{{ url_for('sync') }}" method="POST" id="staples-form">
+                <input type="hidden" name="staples_submitted" value="1">
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+                    Select the staple items that are currently running low. They will be automatically cleaned and appended to your active shopping list.
+                </p>
+                <div class="staples-checklist-container">
+                    {% if staples %}
+                        {% for item in staples %}
+                        <div class="staple-row">
+                            <input type="checkbox" name="low_staples" value="{{ item.id }}" class="custom-checkbox" id="modal_staple_{{ item.id }}"
+                                   {% if low_staples and item.id in low_staples %}checked{% endif %}>
+                            <label style="cursor: pointer; font-size: 0.95rem; color: var(--text-main);" for="modal_staple_{{ item.id }}">{{ item.note }}</label>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p style="color: var(--text-muted); font-size: 0.9rem; font-style: italic;">No staples found in Mealie Staples list.</p>
+                    {% endif %}
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeStaplesModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" onclick="showLoading('Syncing Staples & Recalculating List...')">💾 Save & Recalculate</button>
+                </div>
+            </form>
         </div>
     </div>
 
     <script>
-        var isRecalculating = false;
+        function openStaplesModal() {
+            document.getElementById('staples-modal').style.display = 'flex';
+        }
 
-        window.addEventListener('beforeunload', function (e) {
-            if (isRecalculating) {
-                e.preventDefault();
-                e.returnValue = 'Your changes are being processed. Please do not leave or refresh the page.';
-                return e.returnValue;
+        function closeStaplesModal() {
+            document.getElementById('staples-modal').style.display = 'none';
+        }
+
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('staples-modal');
+            if (event.target === modal) {
+                closeStaplesModal();
             }
         });
-
         function showLoading(text) {
-            isRecalculating = true;
             document.getElementById('loading-text').innerText = text;
+            
+            // Hide progress elements for standard spinner actions
+            const barContainer = document.getElementById('progress-bar-container');
+            const logEl = document.getElementById('loading-log');
+            if (barContainer) barContainer.style.display = 'none';
+            if (logEl) logEl.style.display = 'none';
+            
             document.getElementById('loading-overlay').style.display = 'flex';
         }
 
@@ -817,8 +967,72 @@
             // 3. Main plan generation form submit
             const planForms = document.querySelectorAll('form[action*="/plan"]');
             planForms.forEach(function(form) {
-                form.addEventListener('submit', function() {
-                    showLoading('Generating Weekly Plan...');
+                form.addEventListener('submit', function(e) {
+                    // Check if it's the main generation form
+                    if (form.method.toLowerCase() === 'post') {
+                        e.preventDefault(); // Intercept form submission
+                        
+                        // Collect form data
+                        const formData = new FormData(form);
+                        const params = new URLSearchParams();
+                        
+                        for (const pair of formData.entries()) {
+                            params.append(pair[0], pair[1]);
+                        }
+                        
+                        // Get overlay elements
+                        const logEl = document.getElementById('loading-log');
+                        const barEl = document.getElementById('progress-bar-fill');
+                        const textEl = document.getElementById('loading-text');
+                        const subtextEl = document.getElementById('loading-subtext');
+                        const barContainer = document.getElementById('progress-bar-container');
+                        
+                        // Reset & Show loading overlay with progress options
+                        if (textEl) textEl.innerText = 'Generating Weekly Plan...';
+                        if (subtextEl) subtextEl.innerText = 'Analyzing inputs and initiating generator...';
+                        if (logEl) {
+                            logEl.innerHTML = '';
+                            logEl.style.display = 'block';
+                        }
+                        if (barContainer) {
+                            barContainer.style.display = 'block';
+                        }
+                        if (barEl) {
+                            barEl.style.width = '0%';
+                        }
+                        
+                        document.getElementById('loading-overlay').style.display = 'flex';
+                        
+                        // Start EventSource
+                        const eventSource = new EventSource('/plan-stream?' + params.toString());
+                        
+                        eventSource.onmessage = function(event) {
+                            const data = JSON.parse(event.data);
+                            
+                            if (data.status === 'complete') {
+                                eventSource.close();
+                                window.location.href = '/?success_msg=Successfully generated weekly plan and updated active shopping list!';
+                            } else if (data.status === 'error' || data.status.startsWith('Error:')) {
+                                eventSource.close();
+                                document.getElementById('loading-overlay').style.display = 'none';
+                                alert('Error: ' + (data.message || data.status));
+                            } else {
+                                if (subtextEl) subtextEl.innerText = data.status;
+                                if (barEl) barEl.style.width = data.progress + '%';
+                                if (logEl) {
+                                    const timestamp = new Date().toLocaleTimeString();
+                                    logEl.innerHTML += `[${timestamp}] ${data.status}\n`;
+                                    logEl.scrollTop = logEl.scrollHeight; // Auto-scroll
+                                }
+                            }
+                        };
+                        
+                        eventSource.onerror = function() {
+                            eventSource.close();
+                            document.getElementById('loading-overlay').style.display = 'none';
+                            alert('An error occurred during communication with the server.');
+                        };
+                    }
                 });
             });
         });

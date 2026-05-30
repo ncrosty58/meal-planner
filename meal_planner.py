@@ -11,61 +11,25 @@ from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
+from bs4 import BeautifulSoup
 
 # Load environment variables
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 
-# Constants
-DIRTY_DOZEN = {
-    'strawberry', 'strawberries', 'spinach', 'kale', 'collard', 'mustard green', 
-    'mustard greens', 'grape', 'grapes', 'peach', 'peaches', 'pear', 'pears', 
-    'nectarine', 'nectarines', 'apple', 'apples', 'bell pepper', 'bell peppers', 
-    'hot pepper', 'hot peppers', 'chili pepper', 'chili peppers', 'cherry', 
-    'cherries', 'blueberry', 'blueberries', 'green bean', 'green beans'
-}
+# Constants & family configurations (from config.py)
+from config import (
+    ACTIVE_LIST_ID, STAPLES_LIST_ID, DIRTY_DOZEN, PROCESSED_MEATS, BREAKFAST_PROFILES,
+    LUNCH_LEFTOVER_PROFILE, RDA, FAMILY_RECIPIENT_EMAILS, FAMILY_DIETARY_RULES_PROMPT,
+    FAMILY_NAMES, load_skill_md
+)
 
-# Processed meats to always exclude from meal planning
-PROCESSED_MEATS = {
-    'sausage', 'hotdog', 'hot dog', 'chorizo', 'salami',
-    'pepperoni', 'bacon', 'ham', 'pancetta'
-}
+# --- AI Skill Prompts (Loaded from .md files as raw strings) ---
+_RECIPE_FINDER_SKILL_DEFINITION = load_skill_md('recipe-finder')
+_STAPLE_NAME_CLEANING_SKILL_DEFINITION = load_skill_md('staple-name-cleaning')
+_MEAL_EXCLUSION_PARSING_SKILL_DEFINITION = load_skill_md('meal-exclusion-parsing')
+_WEEKLY_MEAL_SELECTION_SKILL_DEFINITION = load_skill_md('weekly-meal-selection')
+_SHOPPING_LIST_SYNC_SKILL_DEFINITION = load_skill_md('shopping-list-sync')
 
-BREAKFAST_PROFILES = {
-    "English Muffins with Jam": {
-        "calories": 220, "protein": 5, "carbs": 40, "fat": 2, "fiber": 2, "sodium": 320, "sugar": 10, "cholesterol": 0
-    },
-    "Toast with Jam": {
-        "calories": 200, "protein": 4, "carbs": 35, "fat": 2, "fiber": 2, "sodium": 300, "sugar": 10, "cholesterol": 0
-    },
-    "Bagels & Cream Cheese": {
-        "calories": 380, "protein": 11, "carbs": 55, "fat": 12, "fiber": 2, "sodium": 500, "sugar": 6, "cholesterol": 30
-    },
-    "Yogurt with Granola": {
-        "calories": 250, "protein": 12, "carbs": 35, "fat": 5, "fiber": 3, "sodium": 100, "sugar": 15, "cholesterol": 15
-    },
-    "Cereal & Milk": {
-        "calories": 300, "protein": 8, "carbs": 50, "fat": 6, "fiber": 3, "sodium": 200, "sugar": 12, "cholesterol": 15
-    }
-}
-
-LUNCH_LEFTOVER_PROFILE = {
-    "calories": 500, "protein": 22, "carbs": 55, "fat": 15, "fiber": 5, "sodium": 600, "sugar": 5, "cholesterol": 40
-}
-
-# RECOMMENDED DAILY ALLOWANCES (Individual Baseline Reference)
-RDA = {
-    "calories": 2000,
-    "protein": 50,
-    "carbs": 275,
-    "fat": 70,
-    "fiber": 28,  # Target high fiber
-    "sodium": 2300,
-    "sugar": 50,
-    "cholesterol": 300
-}
-
-ACTIVE_LIST_ID = "9a1e2d1e33f24f27a01fef55c89a92de"
-STAPLES_LIST_ID = "1196f23a527b42a9a75b1c3850251948"
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +43,7 @@ def call_gemini(prompt: str, expect_json: bool = True) -> str:
     so callers can parse it themselves.
     """
     api_key = os.getenv('GOOGLE_API_KEY')
-    model = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
+    model = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
     if not api_key:
         raise RuntimeError("GOOGLE_API_KEY is not set in environment.")
 
@@ -93,39 +57,50 @@ def call_gemini(prompt: str, expect_json: bool = True) -> str:
         }
     }
 
+    print("--- AI PROMPT ---")
+    print(prompt)
+    print("-------------------")
+
     resp = requests.post(url, json=payload, timeout=60)
     resp.raise_for_status()
     data = resp.json()
+    print("--- AI RAW RESPONSE ---")
+    print(json.dumps(data, indent=2))
+    print("-----------------------")
     return data["candidates"][0]["content"]["parts"][0]["text"]
 
 def get_mealie_token():
-    """Retrieve the API token automatically from the Mealie SQLite database."""
+    """Retrieve the API token from the SQLite DB volume or fallback to MEALIE_TOKEN env var."""
+    db_paths = [
+        '/mealie-data/mealie.db',
+        '/app/data/mealie.db',
+        '/var/lib/docker/volumes/mealie_mealie-data/_data/mealie.db'
+    ]
+    for path in db_paths:
+        if os.path.exists(path):
+            try:
+                conn = sqlite3.connect(path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT token FROM long_live_tokens WHERE name = 'AntigravityToken'")
+                row = cursor.fetchone()
+                # If 'AntigravityToken' is not found, try 'Gemini' as a fallback
+                if not row:
+                    cursor.execute("SELECT token FROM long_live_tokens WHERE name = 'Gemini'")
+                    row = cursor.fetchone()
+                conn.close()
+                if row and row[0]:
+                    print(f"Loaded auth token dynamically from DB: {path}")
+                    return row[0]
+            except Exception as e:
+                print(f"Error reading token from SQLite {path}: {e}")
+                
+    # Fallback to env variable
     token = os.getenv('MEALIE_TOKEN')
-    if token:
+    if token and token != 'your_mealie_api_token_here':
         return token
         
-    db_path = os.getenv('MEALIE_DB_PATH', '/mealie-data/mealie.db')
-    if not os.path.exists(db_path):
-        # Check if database is in /app/data (like inside the mealie container context)
-        fallback_path = '/app/data/mealie.db'
-        if os.path.exists(fallback_path):
-            db_path = fallback_path
-            
-    if not os.path.exists(db_path):
-        print(f"Error: Database not found at {db_path}")
-        return None
-        
-    try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT token FROM long_live_tokens WHERE name = 'AntigravityToken' LIMIT 1")
-        row = cursor.fetchone()
-        conn.close()
-        if row:
-            return row[0]
-    except Exception as e:
-        print(f"Error reading token from SQLite: {e}")
-    return None
+    raise RuntimeError("Mealie auth token could not be retrieved from DB volume or MEALIE_TOKEN environment variable.")
+
 
 class MealieClient:
     def __init__(self):
@@ -137,9 +112,10 @@ class MealieClient:
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json"
         }
+        self._recipe_details_cache = {}
 
     def get_users(self):
-        """Fetch all users registered in the Mealie database."""
+        """Fetch all users registered in Mealie."""
         r = requests.get(f"{self.api_url}/api/users", headers=self.headers)
         r.raise_for_status()
         return r.json().get('items', [])
@@ -151,10 +127,15 @@ class MealieClient:
         return r.json().get('items', [])
 
     def get_recipe_details(self, recipe_id):
-        """Fetch full details of a specific recipe."""
+        """Fetch full details of a specific recipe, using a cache."""
+        if recipe_id in self._recipe_details_cache:
+            return self._recipe_details_cache[recipe_id]
+
         r = requests.get(f"{self.api_url}/api/recipes/{recipe_id}", headers=self.headers)
         r.raise_for_status()
-        return r.json()
+        details = r.json()
+        self._recipe_details_cache[recipe_id] = details
+        return details
 
     def get_shopping_list_items(self, list_id):
         """Fetch all items currently on a shopping list."""
@@ -175,7 +156,6 @@ class MealieClient:
             chunk = item_ids[i:i+chunk_size]
             r = requests.delete(f"{self.api_url}/api/households/shopping/items", params={"ids": chunk}, headers=self.headers)
             r.raise_for_status()
-
 
     def add_shopping_list_items_bulk(self, items):
         """Add multiple items to the shopping list in bulk."""
@@ -211,7 +191,9 @@ class MealieClient:
         """Delete a meal plan entry by ID."""
         requests.delete(f"{self.api_url}/api/households/mealplans/{entry_id}", headers=self.headers)
 
-
+# ---------------------------------------------------------------------------
+# AI-powered functions
+# ---------------------------------------------------------------------------
 
 def tag_dirty_dozen(note):
     """If an ingredient belongs to the 'Dirty Dozen', automatically append '(Buy Organic)'."""
@@ -219,16 +201,13 @@ def tag_dirty_dozen(note):
         return note
         
     note_lower = note.lower()
-    # Simple regex word boundary check for each item in the dirty dozen
     for item in DIRTY_DOZEN:
-        # Match word boundaries or plural variants
         pattern = r'\b' + re.escape(item) + r's?\b'
         if re.search(pattern, note_lower):
             if "(buy organic)" not in note_lower and "organic" not in note_lower:
                 return f"{note} (Buy Organic)"
             break
     return note
-
 
 def check_blackstone_compatibility(recipe):
     """Check if a recipe uses the Blackstone griddle."""
@@ -237,7 +216,6 @@ def check_blackstone_compatibility(recipe):
     instructions_text = " ".join([i.get('text', '').lower() for i in instructions if i.get('text')]).lower()
     
     return 'blackstone' in name_lower or 'griddle' in name_lower or 'blackstone' in instructions_text or 'griddle' in instructions_text
-
 
 def send_email(subject, html_content):
     """Send an email using SMTP settings."""
@@ -252,26 +230,7 @@ def send_email(subject, html_content):
         print("SMTP settings are missing. Cannot send email.")
         return False
 
-    recipients = []
-    try:
-        db_path = os.getenv('MEALIE_DB_PATH', '/mealie-data/mealie.db')
-        if os.path.exists(db_path):
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT email FROM users WHERE email IS NOT NULL AND email != ''")
-            recipients = [row[0] for row in cursor.fetchall()]
-            conn.close()
-    except Exception as e:
-        print(f"Error querying SQLite users for email: {e}")
-
-    if not recipients:
-        try:
-            client = MealieClient()
-            users = client.get_users()
-            recipients = [u['email'] for u in users if u.get('email')]
-        except Exception as e:
-            print(f"Error fetching email recipients via API: {e}")
-            recipients = [smtp_user]
+    recipients = FAMILY_RECIPIENT_EMAILS
 
     if not recipients:
         print("No recipient emails found. Cannot send email.")
@@ -295,7 +254,6 @@ def send_email(subject, html_content):
         print(f"Failed to send email: {e}")
         return False
 
-
 def parse_nutrient_val(val):
     if not val:
         return 0.0
@@ -304,7 +262,6 @@ def parse_nutrient_val(val):
         return float(cleaned) if cleaned else 0.0
     except:
         return 0.0
-
 
 def calculate_nutrition_for_range(start_date_str, end_date_str):
     """Calculate daily nutrient totals and weekly averages for the date range."""
@@ -390,42 +347,41 @@ def calculate_nutrition_for_range(start_date_str, end_date_str):
             
     return daily_nutrients, averages
 
-
-# ---------------------------------------------------------------------------
-# AI-powered: strip quantities/units from a staple name
-# ---------------------------------------------------------------------------
-
 def clean_staple_names_batch(notes: list) -> dict:
     """
-    Use a single Gemini call to clean an entire list of staple name strings at once.
-    Returns a dict mapping original note -> cleaned name.
+    Use a single Gemini call to clean an entire list of staple name strings at once, delegating to the AI skill.
     Falls back to simple regex stripping per item if the AI call fails.
     """
     if not notes:
         return {}
 
     def _regex_fallback(note):
-        fallback = re.sub(r'^[\d\.\s/]+(\w+\s+)?', '', note.strip()).strip()
-        return fallback.capitalize() if fallback else note.strip().capitalize()
+        cleaned = note.strip()
+        # Remove leading numbers, fractions, and symbols like ¹/₂
+        cleaned = re.sub(r'^[\d\.\s/½⅓¼¾⅛⅖⅗⅘⅙⅚⅛\u00b2\u00b3\u00b9\u2070\u2074-\u2079\u2080-\u2089/]+', '', cleaned).strip()
+        # Remove common units if they are the first word
+        units_pattern = r'^(?:lbs?|oz|ounces?|g|grams?|kg|cups?|tbsps?|tablespoons?|tsps?|teaspoons?|cloves?|cans?|packets?|packages?|slices?|jars?|tins?)\b\s*'
+        cleaned = re.sub(units_pattern, '', cleaned, flags=re.IGNORECASE).strip()
+        return cleaned.capitalize() if cleaned else note.strip().capitalize()
 
     try:
         items_json = json.dumps(notes)
         prompt = (
-            "You are a grocery list editor. "
-            "Given the following JSON array of grocery item strings, remove any leading or embedded "
-            "quantity, number, fraction, or unit of measure (e.g. '6 tbsp', '1 gallon', '2 cloves', '10 oz') "
-            "from each item and return ONLY the clean item name, properly Title Cased. "
-            "Return a JSON object where each key is the ORIGINAL string and each value is the cleaned name. "
-            "Do not add any explanation.\n\n"
-            f"Items: {items_json}"
+            """You are an expert in the 'Mealie Staple Name Cleaning Skill'.
+
+""" +
+            _STAPLE_NAME_CLEANING_SKILL_DEFINITION + """
+
+### CONTEXT FOR THIS INVOCATION:
+""" +
+            f"Items: {items_json}\n\n" +
+            "Return ONLY the JSON object as specified in the skill definition."
         )
         result = json.loads(call_gemini(prompt, expect_json=True))
-        # Fill in any missing keys with fallback
         return {note: result.get(note, _regex_fallback(note)) for note in notes}
     except Exception as e:
         print(f"[AI] clean_staple_names_batch fallback: {e}")
         return {note: _regex_fallback(note) for note in notes}
-
 
 def clean_staple_name(note: str) -> str:
     """
@@ -436,165 +392,142 @@ def clean_staple_name(note: str) -> str:
     result = clean_staple_names_batch([note])
     return result.get(note, note.strip().capitalize())
 
-
-# Module-level cache: original staple note -> cleaned name, populated during sync
-_staple_name_cache: dict = {}
-
-
-def find_matching_staple(ing_note, staples):
-    """
-    Check if a recipe ingredient note matches any staple item.
-    Uses the pre-built _staple_name_cache if available to avoid per-call AI requests.
-    Returns the staple item if found, else None.
-    """
-    ing_lower = ing_note.lower()
-    for s_item in staples:
-        s_note = s_item.get('note', '')
-        # Use cached cleaned name if available, else clean on the fly
-        s_clean = _staple_name_cache.get(s_note, clean_staple_name(s_note)).lower()
-
-        pattern = r'\b' + re.escape(s_clean) + r'\b'
-        if re.search(pattern, ing_lower) or s_clean in ing_lower:
-            return s_item
-    return None
-
-
-def clean_staples_list(client):
-    """
-    Fetch all items in the Staples shopping list, batch-clean their names via a single
-    Gemini call, update any that have quantities/units, and populate the module-level
-    name cache for use by find_matching_staple during the same sync run.
-    """
-    global _staple_name_cache
-    try:
-        staples = client.get_shopping_list_items(STAPLES_LIST_ID)
-        notes = [item.get('note', '') for item in staples if item.get('note')]
-
-        # One Gemini call for all staple names
-        cleaned_map = clean_staple_names_batch(notes)
-        _staple_name_cache = cleaned_map  # Populate cache for find_matching_staple
-
-        for item in staples:
-            note = item.get('note')
-            if not note:
-                continue
-            clean_name = cleaned_map.get(note, note)
-            if clean_name != note or item.get('quantity') != 0.0:
-                payload = {
-                    'id': item['id'],
-                    'shoppingListId': item['shoppingListId'],
-                    'note': clean_name,
-                    'display': clean_name,
-                    'checked': item['checked'],
-                    'position': item['position'],
-                    'quantity': 0.0,
-                    'labelId': item.get('labelId')
-                }
-                client.update_shopping_list_item(item['id'], payload)
-        print(f"[AI] Cleaned {len(notes)} staple names in one batch call.")
-    except Exception as e:
-        print(f"Error cleaning staples list: {e}")
-
-
-def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[]):
-    """Sync active shopping list based on scheduled recipes and low staples, reconciling quantities for staples."""
+def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[], progress_callback=None):
+    """Sync active shopping list based on scheduled recipes and low staples, reconciling quantities programmatically."""
     client = MealieClient()
     
-    # Automatically clean the staples list first
-    clean_staples_list(client)
-    
-    print(f"Syncing shopping list for range {start_date_str} to {end_date_str}...")
-    meal_plans = client.get_meal_plan(start_date_str, end_date_str)
-    
-    ingredients_to_add = []
-    staples = client.get_shopping_list_items(STAPLES_LIST_ID)
-    
-    # Normalise low staples IDs for comparison
-    low_staple_cleaned_ids = [s_id.replace('-', '') for s_id in low_staples_ids]
-    
-    # We maintain a set of added items (lowercase name/note) to prevent duplication
-    added_items = set()
-    
-    # 1. Process manually checked low staples
-    for s_id in low_staples_ids:
-        s_id_clean = s_id.replace('-', '')
-        matched_staple = None
+    print(f"Starting programmatic shopping list sync for {start_date_str} to {end_date_str}...")
+    if progress_callback:
+        progress_callback("Programmatic shopping list sync started...", 90)
+    try:
+        # 1. Fetch data from Mealie
+        meal_plans = client.get_meal_plan(start_date_str, end_date_str)
+        staples = client.get_shopping_list_items(STAPLES_LIST_ID)
+        
+        # Build set of low staples IDs (hyphen-insensitive)
+        low_ids_clean = {s_id.replace('-', '') for s_id in low_staples_ids}
+        
+        # 2. Clean all staples in batch
+        if progress_callback:
+            progress_callback("Cleaning staple names in batch using AI/rules...", 92)
+        staple_notes = [item['note'] for item in staples]
+        cleaned_staple_map = clean_staple_names_batch(staple_notes)
+        
+        # Build lookup maps for staples: lowercase cleaned name -> staple item
+        # and raw ID -> staple item
+        staple_lookup = {}
         for item in staples:
-            item_id_clean = item['id'].replace('-', '')
-            if item_id_clean == s_id_clean:
-                matched_staple = item
-                break
-                
-        if matched_staple:
-            note = matched_staple['note']
-            clean_name = clean_staple_name(note)
+            raw_note = item['note']
+            cleaned_name = cleaned_staple_map.get(raw_note, raw_note).strip()
+            # Save both Title Cased cleaned name and lowercase cleaned name
+            item['_cleaned_name'] = cleaned_name
+            staple_lookup[cleaned_name.lower()] = item
             
-            # Prevent duplicates
-            if clean_name.lower() in added_items:
-                continue
+        ingredients_to_add = []
+        added_items = set() # lowercase note of items added to prevent duplicates
+        
+        def add_to_list(name):
+            cleaned = name.strip()
+            cleaned_lower = cleaned.lower()
+            if cleaned_lower not in added_items:
+                # Apply Dirty Dozen (Buy Organic) tagging
+                tagged = tag_dirty_dozen(cleaned)
+                ingredients_to_add.append({
+                    "shoppingListId": ACTIVE_LIST_ID,
+                    "note": tagged,
+                    "quantity": 0.0,
+                    "checked": False
+                })
+                added_items.add(cleaned_lower)
                 
-            note_tagged = tag_dirty_dozen(clean_name)
-            ingredients_to_add.append({
-                "shoppingListId": ACTIVE_LIST_ID,
-                "note": note_tagged,
-                "display": note_tagged,
-                "checked": False,
-                "quantity": 0.0  # Setting quantity to 0.0 hides quantity in Mealie's UI
-            })
-            added_items.add(clean_name.lower())
-            
-    # 2. Process recipe ingredients
-    for plan in meal_plans:
-        if plan['entryType'] == 'dinner' and plan.get('recipeId'):
-            try:
-                recipe = client.get_recipe_details(plan['recipeId'])
-                recipe_ingredients = recipe.get('recipeIngredient', [])
-                for ing in recipe_ingredients:
-                    note = ing.get('display') or ing.get('note')
-                    if note:
-                        # Check if this ingredient matches any staple
-                        matched_s_item = find_matching_staple(note, staples)
-                        
-                        if matched_s_item:
-                            # It is a staple. Check if it is marked as low
-                            s_item_id_clean = matched_s_item['id'].replace('-', '')
-                            if s_item_id_clean in low_staple_cleaned_ids:
-                                # It is low! We want to add it, but using the clean amount-free name
-                                clean_name = clean_staple_name(matched_s_item['note'])
-                                if clean_name.lower() not in added_items:
-                                    note_tagged = tag_dirty_dozen(clean_name)
-                                    ingredients_to_add.append({
-                                        "shoppingListId": ACTIVE_LIST_ID,
-                                        "note": note_tagged,
-                                        "display": note_tagged,
-                                        "checked": False,
-                                        "quantity": 0.0  # 0.0 quantity for clean display
-                                    })
-                                    added_items.add(clean_name.lower())
-                            # If it is NOT marked as low, we skip adding it entirely (stock is sufficient)
-                            continue
-                        
-                        # It is NOT a staple, so we add it as a normal ingredient with its original quantities.
-                        # The note/display string already contains the full ingredient text including quantity
-                        # (e.g. "1 lime", "2 cups flour"). Setting quantity=0.0 prevents Mealie from
-                        # prepending the numeric quantity a second time, which would produce "1 1 lime".
-                        note_tagged = tag_dirty_dozen(note)
-                        # Avoid duplicates for identical recipe ingredients
-                        if note_tagged.lower() not in added_items:
-                            ingredients_to_add.append({
-                                "shoppingListId": ACTIVE_LIST_ID,
-                                "note": note_tagged,
-                                "display": note_tagged,
-                                "checked": False,
-                                "quantity": 0.0
-                            })
-                            added_items.add(note_tagged.lower())
-            except Exception as e:
-                print(f"Error fetching recipe ingredients for {plan['recipeId']}: {e}")
+        # 3. Process manually marked low staples first
+        for item in staples:
+            clean_id = item['id'].replace('-', '')
+            if clean_id in low_ids_clean:
+                cleaned_name = item.get('_cleaned_name', item['note'])
+                add_to_list(cleaned_name)
                 
-    client.clear_shopping_list(ACTIVE_LIST_ID)
-    client.add_shopping_list_items_bulk(ingredients_to_add)
-    print(f"Successfully synced {len(ingredients_to_add)} items to active shopping list.")
+        # 4. Fetch details of all recipes in the meal plan to extract ingredients
+        if progress_callback:
+            progress_callback("Extracting ingredients from dinner recipes...", 94)
+        recipe_ingredients_by_dinner = []
+        raw_ing_texts = []
+        
+        for p in meal_plans:
+            # We only sync ingredients for scheduled dinner recipes
+            if p['entryType'] == 'dinner' and p.get('recipeId'):
+                try:
+                    r_details = client.get_recipe_details(p['recipeId'])
+                    recipe_ings = []
+                    for ing in r_details.get('recipeIngredient', []):
+                        # Extract the ingredient text
+                        ing_text = ""
+                        food = ing.get('food')
+                        if isinstance(food, dict) and food.get('name'):
+                            ing_text = food.get('name')
+                        elif ing.get('note'):
+                            ing_text = ing.get('note')
+                        else:
+                            ing_text = ing.get('display') or ing.get('originalText') or ""
+                        ing_text = ing_text.strip()
+                        if ing_text:
+                            recipe_ings.append(ing_text)
+                            raw_ing_texts.append(ing_text)
+                    recipe_ingredients_by_dinner.append((p, recipe_ings))
+                except Exception as e:
+                    print(f"Error fetching recipe details for recipe ID {p.get('recipeId')}: {e}")
+                    
+        # 5. Clean all recipe ingredient names in batch
+        if progress_callback:
+            progress_callback("Cleaning recipe ingredients using AI/rules...", 96)
+        unique_ing_texts = list(set(raw_ing_texts))
+        cleaned_ing_map = clean_staple_names_batch(unique_ing_texts)
+        
+        # 6. Reconcile dinner recipe ingredients
+        for p, recipe_ings in recipe_ingredients_by_dinner:
+            for raw_ing in recipe_ings:
+                cleaned_name = cleaned_ing_map.get(raw_ing, raw_ing).strip()
+                cleaned_name_lower = cleaned_name.lower()
+                
+                # Check if it matches any staple
+                matched_staple = None
+                for c_staple_name_lower, staple_item in staple_lookup.items():
+                    # Handle exact, singular, and plural matching
+                    if (cleaned_name_lower == c_staple_name_lower or 
+                        cleaned_name_lower + 's' == c_staple_name_lower or 
+                        c_staple_name_lower + 's' == cleaned_name_lower):
+                        matched_staple = staple_item
+                        break
+                
+                if matched_staple:
+                    # If it is a staple, only add it if it was manually marked as low
+                    clean_staple_id = matched_staple['id'].replace('-', '')
+                    if clean_staple_id in low_ids_clean:
+                        add_to_list(matched_staple.get('_cleaned_name', matched_staple['note']))
+                else:
+                    # If it is not a staple, always add it
+                    add_to_list(cleaned_name)
+                    
+        # 7. Clear the active list and add new items
+        if progress_callback:
+            progress_callback("Clearing active shopping list in Mealie...", 98)
+        print(f"Clearing active shopping list {ACTIVE_LIST_ID}...")
+        client.clear_shopping_list(ACTIVE_LIST_ID)
+        
+        if progress_callback:
+            progress_callback(f"Bulk adding {len(ingredients_to_add)} items to active shopping list...", 99)
+        print(f"Adding {len(ingredients_to_add)} items in bulk to active shopping list...")
+        client.add_shopping_list_items_bulk(ingredients_to_add)
+        
+        print(f"Programmatic shopping list sync completed successfully. Added {len(ingredients_to_add)} items.")
+        if progress_callback:
+            progress_callback("Shopping list synchronization complete!", 100)
+        return True
+    except Exception as e:
+        print(f"Error during programmatic shopping list sync: {e}")
+        if progress_callback:
+            progress_callback(f"Error during shopping list sync: {str(e)}", 100)
+        return False
 
 
 def find_recipe_for_ingredient(ingredient):
@@ -608,193 +541,197 @@ def find_recipe_for_ingredient(ingredient):
         if ing_lower in r['name'].lower():
             return r['id']
             
-    # 2. Check database recipes_ingredients notes
-    db_path = os.getenv('MEALIE_DB_PATH', '/mealie-data/mealie.db')
-    if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT recipe_id FROM recipes_ingredients WHERE note LIKE ?", (f"%{ing_lower}%",))
-            row = cursor.fetchone()
-            conn.close()
-            if row:
-                return format_uuid(row[0])
-        except Exception as e:
-            print(f"Error querying SQLite for ingredients: {e}")
-            
+    # 2. Check recipe ingredients via Mealie API
+    for r in recipes:
+        for ing in r.get('recipeIngredient', []):
+            note = ing.get('display') or ing.get('note')
+            if note and ing_lower in note.lower():
+                return r['id']            
     return None
 
-
-def find_and_import_recipe(ingredient):
-    """Search DuckDuckGo HTML for a recipe, and attempt to scrape and import it into Mealie."""
-    print(f"No existing recipe using '{ingredient}'. Searching the web...")
-    meat_kws = {'chicken', 'turkey', 'pork', 'salmon', 'fish', 'tuna', 'shrimp', 'beef', 'steak', 'meat'}
-    if any(kw in ingredient.lower() for kw in meat_kws):
+def find_and_import_recipe(ingredient, existing_recipe_ids=[]) -> bool:
+    """Search for and import a recipe into Mealie using the Mealie Recipe Finder Skill workflow."""
+    print(f"No existing recipe using '{ingredient}'. Starting Recipe Finder workflow...")
+    client = MealieClient()
+    
+    # 1. Construct Search Query
+    meat_keywords = {'chicken', 'beef', 'salmon', 'turkey', 'pork', 'fish', 'steak', 'tuna', 'poultry', 'lamb'}
+    ingredient_lower = ingredient.lower()
+    has_meat = any(kw in ingredient_lower for kw in meat_keywords)
+    if has_meat:
         query = f"healthy recipe with {ingredient}"
     else:
         query = f"healthy vegetarian recipe with {ingredient}"
-    data = urllib.parse.urlencode({'q': query}).encode()
-    url = 'https://html.duckduckgo.com/html/'
+        
+    print(f"[Recipe Finder] Query: {query}")
+    
+    # 2. Perform Web Search (DuckDuckGo)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
+    search_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+    
     try:
-        req = urllib.request.Request(url, data=data, headers=headers)
-        html = urllib.request.urlopen(req).read().decode('utf-8')
-        links = re.findall(r'href=\"(https?://[^\"]+)\"', html)
+        req = urllib.request.Request(search_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            html = response.read()
+    except Exception as e:
+        print(f"[Recipe Finder] DuckDuckGo search request failed: {e}")
+        return False
         
-        recipe_links = []
-        for l in links:
-            if 'uddg=' in l:
-                parsed_url = urllib.parse.urlparse(l)
-                query_params = urllib.parse.parse_qs(parsed_url.query)
-                if 'uddg' in query_params:
-                    l = query_params['uddg'][0]
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    # 3. Extract and Filter Potential Recipe Links
+    potential_links = []
+    recipe_keywords = {'recipe', 'food', 'cook', 'kitchen', 'eat'}
+    
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        
+        # Unwrap DuckDuckGo proxied links
+        if 'uddg=' in href:
+            parsed_href = urllib.parse.urlparse(href)
+            query_params = urllib.parse.parse_qs(parsed_href.query)
+            if 'uddg' in query_params:
+                href = query_params['uddg'][0]
+                
+        # Filter search engine links
+        parsed_url = urllib.parse.urlparse(href)
+        domain = parsed_url.netloc.lower()
+        if 'duckduckgo' in domain or 'yandex' in domain or 'google' in domain or 'bing' in domain:
+            continue
             
-            l_lower = l.lower()
-            if 'duckduckgo.com' in l_lower or 'yandex.com' in l_lower:
-                continue
-            if any(kw in l_lower for kw in ['recipe', 'food', 'cook', 'kitchen', 'eat']):
-                if l not in recipe_links:
-                    recipe_links.append(l)
+        # Keyword filter
+        href_lower = href.lower()
+        if any(kw in href_lower for kw in recipe_keywords):
+            if href not in potential_links:
+                potential_links.append(href)
+                if len(potential_links) >= 5:
+                    break
                     
-        print(f"Found recipe links for '{ingredient}': {recipe_links[:5]}")
+    print(f"[Recipe Finder] Found {len(potential_links)} potential links for validation.")
+    
+    # 4. AI-Driven Recipe Link Validation & 5. Import Validated Recipes
+    for url in potential_links:
+        print(f"[Recipe Finder] Fetching page for validation: {url}")
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=5) as response:
+                page_html = response.read()
+        except Exception as e:
+            print(f"[Recipe Finder] Failed to fetch {url}: {e}")
+            continue
+            
+        page_soup = BeautifulSoup(page_html, 'html.parser')
         
-        client = MealieClient()
-        for link in recipe_links[:5]:
-            try:
-                print(f"Scraping from: {link}")
+        # Extract title and description
+        title = page_soup.title.string.strip() if page_soup.title else ""
+        desc_meta = page_soup.find('meta', attrs={'name': 'description'})
+        description = desc_meta.get('content', '').strip() if desc_meta else ""
+        
+        # Quick programmatic listicle/collection filter
+        import re
+        title_lower = title.lower()
+        is_listicle = False
+        if re.search(r'\b\d+\s*\+?\s*(?:best|delicious|easy|healthy|quick|favorite|great|ideas|recipes|meals|dinners)\b', title_lower):
+            is_listicle = True
+        elif any(kw in title_lower for kw in ['roundup', 'round-up', 'listicles', 'collection of', 'best recipes', 'favorite recipes']):
+            is_listicle = True
+            
+        if is_listicle:
+            print(f"[Recipe Finder] Programmatically rejected listicle/collection: {title}")
+            continue
+        
+        # Validation prompt
+        validation_prompt = f"""You are a recipe link validator. Given a URL, page title, and description, determine if the content at the URL is a single, complete recipe.
+
+CRITICAL RULES:
+1. Ignore recipe collections, lists, roundups, compilations, galleries, directories, or blog posts about cooking (e.g. "21 Delicious Recipes", "15 Chicken Ideas", "Best ways to cook...").
+2. Focus ONLY on pages that contain ONE specific, single recipe with concrete ingredients and instructions for that single dish.
+3. If the title, URL, or description contains listicle keywords or patterns like "X recipes", "X best...", "X+ recipes", "roundup", "collection", "ideas for", respond with 'NO'.
+4. Respond with 'YES' if it is a single specific recipe, and 'NO' if it is a collection or not a recipe page.
+5. Respond with ONLY 'YES' or 'NO'. Do not add any other text, explanation, or punctuation.
+
+URL: {url}
+Title: {title}
+Description: {description}
+Is this a single recipe?
+"""
+        try:
+            val_res = call_gemini(validation_prompt, expect_json=False).strip().upper()
+            print(f"[Recipe Finder] Validation response for {url}: {val_res}")
+            if "YES" in val_res:
+                # Link validated! Attempt Mealie Import.
+                print(f"[Recipe Finder] Link validated. Attempting to import into Mealie...")
                 payload = {
-                    "url": link,
+                    "url": url,
                     "includeCategories": True,
                     "includeTags": True
                 }
-                r = requests.post(f"{client.api_url}/api/recipes/create/url", json=payload, headers=client.headers)
-                if r.status_code in [200, 201]:
-                    new_recipe_slug = r.json()
-                    print(f"Scraped and imported recipe successfully! Slug: {new_recipe_slug}")
+                # POST to Mealie API
+                r = requests.post(f"{client.api_url}/api/recipes/create/url", json=payload, headers=client.headers, timeout=30)
+                if r.status_code in (200, 201):
+                    resp_json = r.json()
+                    slug = resp_json if isinstance(resp_json, str) else resp_json.get('slug')
+                    print(f"[Recipe Finder] Successfully imported recipe to Mealie. Slug: {slug}")
                     return True
-            except Exception as ex:
-                print(f"Failed to scrape from {link}: {ex}")
-                
-    except Exception as e:
-        print(f"Error searching DuckDuckGo: {e}")
+                else:
+                    print(f"[Recipe Finder] Mealie import failed with status {r.status_code}: {r.text}")
+        except Exception as e:
+            print(f"[Recipe Finder] Error validating or importing link {url}: {e}")
+            
+    print("[Recipe Finder] Failed to find or import a recipe.")
     return False
 
 
-def format_uuid(r_id):
-    """Convert a 32-character hex string to a 36-character UUID string with dashes."""
-    if r_id and '-' not in r_id and len(r_id) == 32:
-        return f"{r_id[:8]}-{r_id[8:12]}-{r_id[12:16]}-{r_id[16:20]}-{r_id[20:]}"
-    return r_id
-
 def get_recipes_from_db():
-    """Fetch all recipes with their nutrition, tags, and ingredients from Mealie SQLite DB."""
-    db_path = os.getenv('MEALIE_DB_PATH', '/mealie-data/mealie.db')
-    if not os.path.exists(db_path):
-        # Fallback to MealieClient API if database is not available
-        try:
-            client = MealieClient()
-            return client.get_all_recipes()
-        except Exception as e:
-            print(f"Error fetching via API fallback: {e}")
-            return []
-            
+    """Fetch all recipes with their nutrition, tags, and ingredients from Mealie via API."""
+    client = MealieClient()
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # 1. Fetch recipes and their nutrition
-        query = """
-            SELECT 
-                r.id, r.name, r.slug, r.description,
-                n.calories, n.fiber_content, n.protein_content, n.carbohydrate_content,
-                n.fat_content, n.sodium_content, n.sugar_content, n.cholesterol_content
-            FROM recipes r
-            LEFT JOIN recipe_nutrition n ON r.id = n.recipe_id
-        """
-        cursor.execute(query)
-        recipes = [dict(row) for row in cursor.fetchall()]
-        
-        # 2. Fetch tags
-        cursor.execute("""
-            SELECT rt.recipe_id, t.name 
-            FROM recipes_to_tags rt
-            JOIN tags t ON rt.tag_id = t.id
-        """)
-        tags_rows = cursor.fetchall()
-        recipe_tags = {}
-        for row in tags_rows:
-            r_id = row[0]
-            tag_name = row[1]
-            if r_id not in recipe_tags:
-                recipe_tags[r_id] = []
-            recipe_tags[r_id].append(tag_name.lower())
-            
-        # 3. Fetch ingredients (using note and original_text)
-        cursor.execute("""
-            SELECT recipe_id, note, original_text
-            FROM recipes_ingredients
-        """)
-        ing_rows = cursor.fetchall()
-        recipe_ings = {}
-        for row in ing_rows:
-            r_id = row[0]
-            note = row[1] or ""
-            orig = row[2] or ""
-            ing_text = f"{note} {orig}".strip()
-            if r_id not in recipe_ings:
-                recipe_ings[r_id] = []
-            recipe_ings[r_id].append(ing_text.lower())
-            
-        # 4. Fetch instructions for Blackstone text checks
-        cursor.execute("""
-            SELECT recipe_id, text
-            FROM recipe_instructions
-        """)
-        inst_rows = cursor.fetchall()
-        recipe_insts = {}
-        for row in inst_rows:
-            r_id = row[0]
-            text = row[1] or ""
-            if r_id not in recipe_insts:
-                recipe_insts[r_id] = []
-            recipe_insts[r_id].append(text.lower())
-
-        conn.close()
-        
-        formatted_recipes = []
-        for r in recipes:
-            r_id = r['id']
-            api_id = format_uuid(r_id)
-            r['id'] = api_id
-            r['tags'] = recipe_tags.get(r_id, [])
-            r['ingredients'] = recipe_ings.get(r_id, [])
-            r['instructions'] = recipe_insts.get(r_id, [])
-            formatted_recipes.append(r)
-            
-        return formatted_recipes
+        all_recipes_overview = client.get_all_recipes()
+        detailed_recipes = []
+        for r_overview in all_recipes_overview:
+            try:
+                full_recipe = client.get_recipe_details(r_overview['id'])
+                
+                nutrition = full_recipe.get('nutrition', {})
+                
+                ingredients_list = []
+                for ing in full_recipe.get('recipeIngredient', []):
+                    note = ing.get('note') or ""
+                    orig = ing.get('originalText') or ""
+                    ing_text = f"{note} {orig}".strip()
+                    if ing_text:
+                        ingredients_list.append(ing_text.lower())
+                
+                instructions_list = [i.get('text', '').lower() for i in full_recipe.get('recipeInstructions', [])]
+                
+                detailed_recipes.append({
+                    'id': full_recipe['id'],
+                    'name': full_recipe['name'],
+                    'slug': full_recipe.get('slug'),
+                    'description': full_recipe.get('description'),
+                    'calories': parse_nutrient_val(nutrition.get('calories')),
+                    'fiber_content': parse_nutrient_val(nutrition.get('fiberContent')),
+                    'protein_content': parse_nutrient_val(nutrition.get('proteinContent')),
+                    'carbohydrate_content': parse_nutrient_val(nutrition.get('carbohydrateContent')),
+                    'fat_content': parse_nutrient_val(nutrition.get('fatContent')),
+                    'sodium_content': parse_nutrient_val(nutrition.get('sodiumContent')),
+                    'sugar_content': parse_nutrient_val(nutrition.get('sugarContent')),
+                    'cholesterol_content': parse_nutrient_val(nutrition.get('cholesterolContent')),
+                    'tags': [t.get('name', '').lower() for t in full_recipe.get('tags', [])],
+                    'ingredients': ingredients_list,
+                    'instructions': instructions_list
+                })
+            except Exception as e:
+                print(f"Error fetching detailed recipe for {r_overview.get('id', 'Unknown')}: {e}")
+        return detailed_recipes
     except Exception as e:
-        print(f"Error fetching recipes from DB: {e}")
-        # Fallback to API
-        try:
-            client = MealieClient()
-            return client.get_all_recipes()
-        except:
-            return []
-
-# ---------------------------------------------------------------------------
-# AI-powered: parse free-text meal exclusions
-# ---------------------------------------------------------------------------
+        print(f"Error fetching all recipes via API: {e}")
+        return []
 
 def parse_exclusions(text: str) -> dict:
-    """
-    Use Gemini to interpret a free-text description of which meals to skip,
-    and return a structured dict: {"Monday": ["dinner"], "Friday": ["breakfast", "dinner"], ...}.
-    Valid meal values are: breakfast, lunch, dinner.
-    Valid day keys are: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday.
-    """
+    """Use Gemini to interpret a free-text description of which meals to skip, delegating to the AI skill."""
     if not text or not text.strip():
         return {}
 
@@ -806,32 +743,22 @@ def parse_exclusions(text: str) -> dict:
     }
 
     prompt = (
-        "You are a meal planning assistant. The user has described which meals they want to SKIP "
-        "or OPT OUT of for the upcoming week. "
-        f"The week runs: {', '.join(f'{d} ({dt})' for d, dt in week_dates.items())}.\n\n"
-        "Based on the user's input below, return a JSON object where:\n"
-        "  - Keys are day names: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday\n"
-        "  - Values are arrays of meal names to SKIP for that day\n"
-        "  - Valid meal names are: breakfast, lunch, dinner\n"
-        "  - Only include days where at least one meal should be skipped\n"
-        "  - If no meals should be skipped, return an empty object {}\n\n"
-        "Examples:\n"
-        "  Input: 'skip dinner Saturday and Sunday'\n"
-        "  Output: {\"Saturday\": [\"dinner\"], \"Sunday\": [\"dinner\"]}\n\n"
-        "  Input: 'we are eating out all week'\n"
-        "  Output: {\"Monday\": [\"dinner\"], \"Tuesday\": [\"dinner\"], \"Wednesday\": [\"dinner\"], "
-        "\"Thursday\": [\"dinner\"], \"Friday\": [\"dinner\"], \"Saturday\": [\"dinner\"], \"Sunday\": [\"dinner\"]}\n\n"
-        "  Input: 'Monday through Wednesday no cooking at all'\n"
-        "  Output: {\"Monday\": [\"breakfast\", \"lunch\", \"dinner\"], \"Tuesday\": [\"breakfast\", \"lunch\", \"dinner\"], "
-        "\"Wednesday\": [\"breakfast\", \"lunch\", \"dinner\"]}\n\n"
-        f"User input: {text}\n\n"
-        "Return ONLY the JSON object, nothing else."
+        """You are an expert in the 'Mealie Meal Exclusion Parsing Skill'.
+
+""" +
+        _MEAL_EXCLUSION_PARSING_SKILL_DEFINITION +
+        """
+
+### CONTEXT FOR THIS INVOCATION:
+""" +
+        f"User input: {text}\n" +
+        f"Week dates: {', '.join(f'{d} ({dt})' for d, dt in week_dates.items())}.\n\n" +
+        "Return ONLY the JSON object as specified in the skill definition."
     )
 
     try:
         raw = call_gemini(prompt, expect_json=True)
         result = json.loads(raw)
-        # Validate structure
         valid_days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
         valid_meals = {"breakfast", "lunch", "dinner"}
         exclusions = {}
@@ -846,27 +773,30 @@ def parse_exclusions(text: str) -> dict:
         print(f"[AI] parse_exclusions failed: {e} — no exclusions applied")
         return {}
 
-
-def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_items="", special_requests="", low_staples_ids=[]):
-    """Generate weekly plan using an intelligent rule-based scoring engine, schedule in Mealie, and sync active shopping list."""
+def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_items="", special_requests="", low_staples_ids=[], progress_callback=None):
+    """Generate weekly plan using an AI-driven intelligent rule-based scoring engine and schedule in Mealie."""
     client = MealieClient()
     
-    # 1. Handle Freezer Items Scraping & Import
+    if progress_callback:
+        progress_callback("Analyzing inputs and processing freezer items...", 5)
+        
     priority_recipe_ids = []
     if freezer_items:
         items = [i.strip() for i in freezer_items.split(",") if i.strip()]
         for item in items:
+            if progress_callback:
+                progress_callback(f"Finding/importing recipe for freezer item: {item}...", 15)
             recipe_id = find_recipe_for_ingredient(item)
             if not recipe_id:
-                if find_and_import_recipe(item):
+                if find_and_import_recipe(item, existing_recipe_ids=priority_recipe_ids): # Pass existing IDs for AI to avoid re-importing
                     recipe_id = find_recipe_for_ingredient(item)
             if recipe_id and recipe_id not in priority_recipe_ids:
                 priority_recipe_ids.append(recipe_id)
                 
-    # 2. Fetch all recipes (freshly imported or from DB)
+    if progress_callback:
+        progress_callback("Retrieving all recipes from Mealie database...", 30)
     all_recipes = get_recipes_from_db()
     
-    # 3. Clean and filter recipes (exclude processed meats via PROCESSED_MEATS constant)
     allowed_recipes = []
     
     for r in all_recipes:
@@ -877,7 +807,6 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
         
         all_text = f"{name_lower} {slug_lower} {desc_lower} " + " ".join(tags)
         
-        # Cache all_text on the recipe dict to reuse in the scoring loop below
         r['_all_text'] = all_text
         
         if any(kw in all_text for kw in PROCESSED_MEATS):
@@ -888,11 +817,9 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
     if not allowed_recipes:
         print("Warning: No recipes left after filtering! Using unfiltered recipes.")
         allowed_recipes = all_recipes
-
-    # 4. Use Gemini to select and rank dinners for the week
-    #    We tell it everything: family preferences, dietary rules, special requests,
-    #    freezer items, and the full allowed recipe catalogue.
-    #    It returns an ordered list of recipe IDs — one per dinner slot.
+        
+    if progress_callback:
+        progress_callback("Filtering recipes and checking exclusions...", 40)
 
     start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
     end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
@@ -905,7 +832,6 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
     ]
     num_dinners = len(dinner_days)
 
-    # Build a compact recipe catalogue for the AI prompt
     recipe_catalogue = [
         {
             "id": r["id"],
@@ -920,32 +846,26 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
     ]
 
     selection_prompt = (
-        "You are a meal planner for the Crosty family. "
-        "Your job is to select the best dinners for the upcoming week from the recipe catalogue below, "
-        "following all family rules and preferences.\n\n"
-        "=== FAMILY DIETARY RULES ===\n"
-        "- Avoid processed meats entirely: sausage, hotdog, chorizo, salami, pepperoni, bacon, ham, pancetta\n"
-        "- Beef and steak are expensive and eaten seldom — give them a significant penalty unless specifically requested\n"
-        "- Pork is acceptable\n"
-        "- Prefer high-fiber meals where possible\n"
-        "- Variety matters — do not repeat the same recipe more than once in a week\n"
-        "- The family enjoys: salmon, chicken, turkey, vegetarian dishes, Mexican, Italian, and Asian cuisine\n"
-        "- The family has a Blackstone griddle and enjoys using it occasionally\n\n"
-        "=== THIS WEEK'S CONTEXT ===\n"
-        f"- Dinner nights this week: {', '.join(dinner_days)}\n"
-        f"- Number of dinners to plan: {num_dinners}\n"
-        f"- Freezer items to prioritise (use recipes containing these first): {freezer_items or 'none'}\n"
-        f"- Special requests from the family: {special_requests or 'none'}\n\n"
-        "=== RECIPE CATALOGUE (JSON) ===\n"
-        f"{json.dumps(recipe_catalogue, indent=2)}\n\n"
-        "=== YOUR TASK ===\n"
-        f"Select exactly {num_dinners} recipe IDs from the catalogue above, one for each dinner night. "
-        "Return them in order (first ID = first dinner night). "
-        "Prioritise variety, family preferences, freezer items, and special requests. "
-        "Return a JSON object with a single key 'dinner_ids' containing the ordered list of recipe ID strings. "
-        "Example: {\"dinner_ids\": [\"abc123\", \"def456\", ...]}"
+        """You are an expert in the 'Mealie Weekly Meal Selection Skill'.
+
+""" +
+        _WEEKLY_MEAL_SELECTION_SKILL_DEFINITION +
+        """
+
+### CONTEXT FOR THIS INVOCATION:
+""" +
+        f"- **Family Dietary Rules & Preferences**: {FAMILY_DIETARY_RULES_PROMPT}\n" +
+        f"- **Dinner nights this week**: {', '.join(dinner_days)}\n" +
+        f"- **Number of dinners to plan**: {num_dinners}\n" +
+        f"- **Freezer items to prioritize**: {freezer_items or 'none'}\n" +
+        f"- **Special requests from the family**: {special_requests or 'none'}\n\n" +
+        f"### RECIPE CATALOGUE (JSON):\n" +
+        f"{json.dumps(recipe_catalogue, indent=2)}\n\n" +
+        "Return ONLY the JSON object as specified in the skill definition."
     )
 
+    if progress_callback:
+        progress_callback("Querying Gemini AI for optimal dinner plan based on rules...", 50)
     try:
         raw = call_gemini(selection_prompt, expect_json=True)
         ai_result = json.loads(raw)
@@ -953,23 +873,21 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
         print(f"[AI] Selected {len(selected_ids)} dinner recipe IDs: {selected_ids}")
     except Exception as e:
         print(f"[AI] Recipe selection failed: {e} — falling back to random selection")
+        if progress_callback:
+            progress_callback(f"Gemini selection failed ({str(e)}), falling back to random selection...", 65)
         random.shuffle(allowed_recipes)
         selected_ids = [r["id"] for r in allowed_recipes[:num_dinners]]
 
-    # Map selected IDs back to recipe objects (validate against catalogue)
     id_to_recipe = {r["id"]: r for r in allowed_recipes}
     clean_recipes = [id_to_recipe[rid] for rid in selected_ids if rid in id_to_recipe]
-    # If AI hallucinated IDs or we got too few, pad with random allowed recipes
     used_ids = {r["id"] for r in clean_recipes}
     remaining = [r for r in allowed_recipes if r["id"] not in used_ids]
     random.shuffle(remaining)
     clean_recipes = clean_recipes + remaining
     
-    # 5. Build calendar meals list
     meals = []
     current_date = start_date
     recipe_index = 0
-    # Derive breakfast rotation directly from the nutrition profiles so the two can't drift
     breakfasts = list(BREAKFAST_PROFILES.keys())
     while current_date <= end_date:
         d_str = current_date.strftime("%Y-%m-%d")
@@ -977,20 +895,17 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
         
         day_exclusions = exclusions.get(day_name, [])
         
-        # Schedule breakfast
         if 'breakfast' in day_exclusions:
             meals.append({"date": d_str, "entryType": "breakfast", "title": "Skipped", "recipeId": None})
         else:
             bf = breakfasts[current_date.weekday() % len(breakfasts)]
             meals.append({"date": d_str, "entryType": "breakfast", "title": bf, "recipeId": None})
             
-        # Schedule lunch
         if 'lunch' in day_exclusions:
             meals.append({"date": d_str, "entryType": "lunch", "title": "Skipped", "recipeId": None})
         else:
             meals.append({"date": d_str, "entryType": "lunch", "title": "Leftovers", "recipeId": None})
         
-        # Schedule dinner
         if 'dinner' in day_exclusions:
             meals.append({"date": d_str, "entryType": "dinner", "title": "Eating Out", "recipeId": None})
         else:
@@ -1003,13 +918,14 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
             
         current_date += timedelta(days=1)
         
-    # 6. Execute the generated plan to Mealie
-    # Delete existing entries in range
+    if progress_callback:
+        progress_callback("Clearing old scheduled meals in Mealie calendar...", 70)
     existing_plans = client.get_meal_plan(start_date_str, end_date_str)
     for p in existing_plans:
         client.delete_meal_plan_entry(p['id'])
         
-    # Schedule all meals
+    if progress_callback:
+        progress_callback("Scheduling new breakfasts, lunches, and dinners...", 80)
     for m in meals:
         client.schedule_meal(
             date_str=m['date'],
@@ -1018,9 +934,5 @@ def generate_weekly_plan(start_date_str, end_date_str, exclude_text="", freezer_
             recipe_id=m.get('recipeId')
         )
         
-    # 7. Sync active shopping list with selected low staples
-    sync_shopping_list(start_date_str, end_date_str, low_staples_ids)
+    sync_shopping_list(start_date_str, end_date_str, low_staples_ids, progress_callback=progress_callback)
     print(f"Rule-based plan successfully generated and scheduled for {start_date_str} to {end_date_str}.")
-
-
-
