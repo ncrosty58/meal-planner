@@ -38,7 +38,7 @@ This skill is responsible for generating a complete 7-day meal plan. It intellig
         3. To provide variety after several consecutive days of leftovers.
     *   **Nutritional Balance:** If the upcoming dinner is very heavy, lean toward a lighter lunch.
 
-4.  **Plan Breakfasts:** Assign standard options (Cereal & Milk, Yogurt with Granola, etc.) providing daily variety.
+4.  **Plan Breakfasts:** Assign standard options providing daily variety. The allowed options are: "Cereal & Milk", "Yogurt with Granola", "Bagels & Cream Cheese", "English Muffins with Jam", "Oats", and "Toast with Jam". Do not use any other breakfast titles.
 
 ## Output
 Return a JSON object containing a `days` array. Each day must have `date`, and a `meals` object with `breakfast`, `lunch`, `dinner`, and `prep_note`. 

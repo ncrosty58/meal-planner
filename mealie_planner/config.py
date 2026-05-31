@@ -105,6 +105,9 @@ BREAKFAST_PROFILES = {
     },
     "Cereal & Milk": {
         "calories": 300, "protein": 8, "carbs": 50, "fat": 6, "fiber": 3, "sodium": 200, "sugar": 12, "cholesterol": 15
+    },
+    "Oats": {
+        "calories": 280, "protein": 10, "carbs": 48, "fat": 5, "fiber": 8, "sodium": 115, "sugar": 12, "cholesterol": 0
     }
 }
 
