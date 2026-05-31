@@ -247,5 +247,58 @@ def update_recipe(
     except Exception as e:
         raise ToolError(f"Error updating recipe '{slug}': {str(e)}")
 
+@mcp.tool()
+def get_shopping_list_labels() -> List[Dict[str, Any]]:
+    """Get all available shopping list labels (categories) from Mealie.
+    Use this to identify existing categories for item organization.
+
+    Returns:
+        List[Dict[str, Any]]: List of label objects (id, name).
+    """
+    try:
+        return mealie.get_labels()
+    except Exception as e:
+        raise ToolError(f"Error fetching labels: {str(e)}")
+
+@mcp.tool()
+def update_shopping_list_item(
+    item_id: str,
+    note: Optional[str] = None,
+    quantity: Optional[float] = None,
+    checked: Optional[bool] = None,
+    label_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Updates an existing shopping list item. Use this to change categories (label_id) or details.
+
+    Args:
+        item_id: The unique ID of the item to update.
+        note: New name or note for the item.
+        quantity: New numeric quantity.
+        checked: Whether the item is checked off.
+        label_id: The ID of the category/label to assign.
+
+    Returns:
+        Dict[str, Any]: The updated item details.
+    """
+    try:
+        # First fetch current item to preserve other fields
+        # Note: We use the internal list items fetcher
+        items_res = mealie.get_shopping_list_items(per_page=1000)
+        items = items_res.get('items', [])
+        current_item = next((i for i in items if i['id'] == item_id), None)
+        
+        if not current_item:
+            raise ToolError(f"Shopping list item with ID '{item_id}' not found.")
+            
+        # Merge updates
+        if note is not None: current_item['note'] = note
+        if quantity is not None: current_item['quantity'] = quantity
+        if checked is not None: current_item['checked'] = checked
+        if label_id is not None: current_item['labelId'] = label_id
+        
+        return mealie.update_shopping_list_item(item_id, current_item)
+    except Exception as e:
+        raise ToolError(f"Error updating shopping list item: {str(e)}")
+
 if __name__ == "__main__":
     mcp.run()
