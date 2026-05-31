@@ -31,7 +31,8 @@ class ShoppingListSync:
             staples = self.client.get_shopping_list_items(STAPLES_LIST_ID)
             
             # Build set of low staples IDs (hyphen-insensitive)
-            low_ids_clean = {s_id.replace('-', '') for s_id in low_staples_ids}
+            low_ids_clean = {s_id.replace('-', '').lower() for s_id in low_staples_ids}
+            print(f"[Sync] Normalized {len(low_ids_clean)} low staple IDs for matching.")
             
             # Map low staples to their notes (names) and build staples notes list
             staples_notes = [item['note'] for item in staples]
@@ -43,9 +44,11 @@ class ShoppingListSync:
 
             low_staples_notes = []
             for item in staples:
-                clean_id = item['id'].replace('-', '')
+                clean_id = item['id'].replace('-', '').lower()
                 if clean_id in low_ids_clean:
                     low_staples_notes.append(item['note'])
+            
+            print(f"[Sync] Identified {len(low_staples_notes)} staples marked as low: {low_staples_notes}")
                     
             # 2. Extract ingredient display strings from meals
             if progress_callback:
