@@ -11,10 +11,10 @@ base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 mcp_src_dir = os.path.join(base_dir, "mealie-mcp-server", "src")
 
 # Critical: Ensure mcp_src_dir is at the VERY FRONT to avoid shadowing 'utils' or 'mealie'
-# Also remove the script's own directory from sys.path to prevent 'from .config import TIMEZONE' errors
-# in files that are improperly imported as top-level modules.
+# Python automatically adds the script's directory to sys.path[0]. We must remove it
+# or replace it to prevent its 'utils.py' from being found first.
 script_dir = os.path.dirname(os.path.abspath(__file__))
-if script_dir in sys.path:
+while script_dir in sys.path:
     sys.path.remove(script_dir)
 if mcp_src_dir not in sys.path:
     sys.path.insert(0, mcp_src_dir)

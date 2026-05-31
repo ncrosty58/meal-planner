@@ -309,14 +309,15 @@ def change_meal():
     return redirect(url_for('index'))
 
 @app.route('/chat', methods=['POST'])
-async def chat():
+def chat():
     from mealie_planner.mcp_agent import run_mcp_chat
+    import asyncio
     try:
         data = request.get_json()
         message = data.get('message', '')
         history = data.get('history', [])
         
-        reply, new_history, plan_changed = await run_mcp_chat(history, message)
+        reply, new_history, plan_changed = asyncio.run(run_mcp_chat(history, message))
         
         return json.dumps({
             "success": True,
