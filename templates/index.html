@@ -1556,6 +1556,88 @@
     </div>
 
     <script>
+        // --- GLOBAL UTILITIES ---
+        
+        // 13. Copy Shopping List to Clipboard
+        function copyShoppingList(event) {
+            console.log("Copy Shopping List clicked");
+            const btn = event.currentTarget;
+            const items = document.querySelectorAll('.shopping-item');
+            const lines = [];
+            
+            items.forEach(item => {
+                const checkbox = item.querySelector('.shopping-list-checkbox');
+                // Use checkboxes if they exist (dashboard view)
+                if (checkbox && !checkbox.checked) {
+                    const textSpan = item.querySelector('.shopping-item-text');
+                    if (textSpan) {
+                        const text = textSpan.innerText.trim();
+                        lines.push(`- ${text}`);
+                    }
+                }
+            });
+
+            if (lines.length === 0) {
+                console.log("No unchecked items found");
+                alert("No active items on the shopping list to copy!");
+                return;
+            }
+
+            const fullText = lines.join('\n');
+            console.log("Copying text:", fullText);
+            
+            // Modern Clipboard API with fallback
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(fullText).then(() => {
+                    handleCopySuccess(btn);
+                }).catch(err => {
+                    console.error('Clipboard API failed:', err);
+                    fallbackCopy(fullText, btn);
+                });
+            } else {
+                fallbackCopy(fullText, btn);
+            }
+        }
+
+        function fallbackCopy(text, btn) {
+            console.log("Using fallback copy method");
+            try {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.top = "0";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                if (successful) {
+                    handleCopySuccess(btn);
+                } else {
+                    alert("Unable to copy to clipboard.");
+                }
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+                alert("Failed to copy list.");
+            }
+        }
+
+        function handleCopySuccess(btn) {
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Copied!
+            `;
+            btn.classList.remove('btn-secondary');
+            btn.classList.add('btn-primary');
+            
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-secondary');
+            }, 2000);
+        }
 
         // --- UI NAVIGATION ---
         
@@ -2005,86 +2087,8 @@
                 return processedLines.join('');
             }
 
-        // 13. Copy Shopping List to Clipboard
-        function copyShoppingList(event) {
-            const btn = event.currentTarget;
-            const items = document.querySelectorAll('.shopping-item');
-            const lines = [];
-            
-            items.forEach(item => {
-                const checkbox = item.querySelector('.shopping-list-checkbox');
-                if (checkbox && !checkbox.checked) {
-                    const textSpan = item.querySelector('.shopping-item-text');
-                    if (textSpan) {
-                        // Extract text and clean up whitespace/extra tags
-                        const text = textSpan.innerText.trim();
-                        lines.push(`- ${text}`);
-                    }
-                }
-            });
-
-            if (lines.length === 0) {
-                alert("No active items on the shopping list to copy!");
-                return;
-            }
-
-            const fullText = lines.join('\n');
-            
-            // Modern Clipboard API with simple fallback
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(fullText).then(() => {
-                    handleCopySuccess(btn);
-                }).catch(err => {
-                    console.error('Clipboard API failed:', err);
-                    fallbackCopy(fullText, btn);
-                });
-            } else {
-                fallbackCopy(fullText, btn);
-            }
-        }
-
-        function fallbackCopy(text, btn) {
-            try {
-                const textArea = document.createElement("textarea");
-                textArea.value = text;
-                textArea.style.position = "fixed";
-                textArea.style.left = "-9999px";
-                textArea.style.top = "0";
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                const successful = document.execCommand('copy');
-                document.body.removeChild(textArea);
-                if (successful) {
-                    handleCopySuccess(btn);
-                } else {
-                    alert("Unable to copy to clipboard.");
-                }
-            } catch (err) {
-                console.error('Fallback copy failed:', err);
-                alert("Failed to copy list.");
-            }
-        }
-
-        function handleCopySuccess(btn) {
-            const originalText = btn.innerHTML;
-            btn.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Copied!
-            `;
-            btn.classList.remove('btn-secondary');
-            btn.classList.add('btn-primary');
-            
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.classList.remove('btn-primary');
-                btn.classList.add('btn-secondary');
-            }, 2000);
-        }
-
         // Trigger load from storage
         loadChatFromStorage();
-        });
     </script>
 </body>
 </html>
