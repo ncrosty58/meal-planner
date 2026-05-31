@@ -70,14 +70,10 @@ class RecipeCrawler:
         variants = sorted(list(set(v for v in variants if v)), key=len, reverse=True)
 
         if self._detailed_recipes_cache is None:
-            def fetch_details(r):
-                try:
-                    return self.client.get_recipe_details(r['id'])
-                except Exception:
-                    return None
-
-            with ThreadPoolExecutor(max_workers=15) as executor:
-                self._detailed_recipes_cache = list(executor.map(fetch_details, all_recipes))
+            # Use the client's safe bulk fetcher to populate our local cache
+            recipe_ids = [r['id'] for r in all_recipes]
+            details_map = self.client.get_recipes_details_bulk(recipe_ids)
+            self._detailed_recipes_cache = [d for d in details_map.values() if d]
 
         for r_details in self._detailed_recipes_cache:
             if not r_details:

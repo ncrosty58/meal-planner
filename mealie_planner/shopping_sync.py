@@ -93,21 +93,42 @@ class ShoppingListSync:
                             active_staple_notes.append(item['note'])
 
             # 3. Extract ingredients from scheduled recipes
-            raw_recipe_ingredients = []
+            if progress_callback: progress_callback("Finding recipes and ingredients...", 94)
+            
+            recipe_ids_to_fetch = set()
+            meal_plan_mapping = [] # List of (entry, derived_rid)
+            
             all_recipes_overview = self.crawler.get_recipes_from_db()
+            
             for p in meal_plans:
                 rid = p.get('recipeId')
                 title = p.get('title') or ""
+                
+                # If it's a text-based entry, try to find a matching recipe
                 if not rid and title:
-                    if title.lower().strip() not in {"leftovers", "pb&j sandwich", "eating out", "skipped", "cereal & milk", "oats"}:
+                    if title.lower().strip() not in {"leftovers", "pb&j sandwich", "eating out", "skipped", "cereal & milk", "oats", "planned meal", "planned dinner"}:
+                        # Note: This might still trigger a crawler cache build, but it's now safe
                         rid = self.crawler.find_recipe_for_ingredient(title, all_recipes=all_recipes_overview)
+                
                 if rid:
-                    try:
-                        r_details = self.client.get_recipe_details(rid)
+                    recipe_ids_to_fetch.add(rid)
+                
+                meal_plan_mapping.append((p, rid))
+
+            # Bulk fetch all required recipe details at once
+            print(f"[Sync] Bulk fetching details for {len(recipe_ids_to_fetch)} unique recipes.")
+            details_map = self.client.get_recipes_details_bulk(list(recipe_ids_to_fetch))
+
+            raw_recipe_ingredients = []
+            for _, rid in meal_plan_mapping:
+                if rid and rid in details_map:
+                    r_details = details_map[rid]
+                    if r_details:
                         for ing in r_details.get('recipeIngredient', []):
                             txt = ing.get('display') or ing.get('originalText') or ""
                             if txt.strip(): raw_recipe_ingredients.append(txt.strip())
-                    except: pass
+
+            print(f"[Sync] Extracted {len(raw_recipe_ingredients)} raw ingredient strings.")
 
             # 4. Call AI Skill
             if progress_callback: progress_callback("Generating optimized list...", 96)

@@ -60,22 +60,16 @@ class UnifiedMealieClient(MealieFetcher):
         return details
 
     def get_recipes_details_bulk(self, recipe_ids: List[str]) -> Dict[str, Dict[str, Any]]:
-        """Fetch full details for a list of recipes in parallel."""
-        uncached_ids = [rid for rid in recipe_ids if rid not in self._recipe_details_cache]
-        
-        if uncached_ids:
-            def fetch_single(rid):
+        """Fetch full details for a list of recipes sequentially to protect server stability."""
+        import time
+        for rid in recipe_ids:
+            if rid not in self._recipe_details_cache:
                 try:
-                    return rid, self.get_recipe_details(rid)
+                    # Sequential fetch with a small breath to prevent SQLite/Worker locking
+                    self.get_recipe_details(rid)
+                    time.sleep(0.1) 
                 except Exception as e:
-                    logger.error(f"Error bulk fetching recipe {rid}: {e}")
-                    return rid, None
-            
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                results = executor.map(fetch_single, uncached_ids)
-                for rid, details in results:
-                    if details:
-                        self._recipe_details_cache[rid] = details
+                    logger.error(f"Error fetching recipe {rid}: {e}")
 
         return {rid: self._recipe_details_cache.get(rid) for rid in recipe_ids}
 
