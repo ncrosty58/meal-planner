@@ -516,8 +516,8 @@
                 <button type="submit" class="btn btn-secondary" style="text-align: left; padding: 1rem; width: 100%;">🔄 Refresh List</button>
             </form>
             
-            <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('Archive current week?')">
-                <button type="submit" class="btn btn-danger" style="text-align: left; padding: 1rem; width: 100%;">📦 Archive Week</button>
+            <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('Permanently clear current menu and shopping list?')">
+                <button type="submit" class="btn btn-danger" style="text-align: left; padding: 1rem; width: 100%;">🗑️ Clear Week</button>
             </form>
         </div>
     </div>
