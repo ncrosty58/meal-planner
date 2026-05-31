@@ -121,7 +121,24 @@ class ShoppingListSync:
             except Exception as e:
                 raise SkillParsingError(f"Failed to parse AI response: {e}")
 
-            # 4. Write to Mealie
+            # 4. Fetch current list state to preserve checkmarks (Safe Sync)
+            if progress_callback:
+                progress_callback("Preserving your checkmarks...", 97)
+            
+            # Map of note -> checked status for existing items
+            checked_items_cache = {}
+            try:
+                current_items = self.client.get_shopping_list_items_for_list(ACTIVE_LIST_ID)
+                for item in current_items:
+                    if item.get('checked'):
+                        # Store both raw note and normalized version for better matching
+                        note = item.get('note', '').strip().lower()
+                        if note:
+                            checked_items_cache[note] = True
+            except Exception as e:
+                print(f"[Sync] Warning: Could not fetch current list for state preservation: {e}")
+
+            # 5. Write to Mealie
             if progress_callback:
                 progress_callback("Writing items to Mealie shopping list...", 98)
             
@@ -143,11 +160,17 @@ class ShoppingListSync:
                 # For ingredients, include the unit in the note (e.g. "1 lb Chicken Breast")
                 full_note = f"{unit} {name}".strip() if unit else name
                 
+                # Safe Sync: Check if this item was previously checked off
+                is_checked = False
+                note_key = full_note.strip().lower()
+                if note_key in checked_items_cache:
+                    is_checked = True
+                
                 ingredients_list.append({
                     "shoppingListId": ACTIVE_LIST_ID,
                     "note": full_note,
                     "quantity": qty,
-                    "checked": False,
+                    "checked": is_checked,
                     "position": idx,
                     "labelId": label_id
                 })
