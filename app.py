@@ -21,7 +21,7 @@ from scripts.clear_mealie import wipe_mealie_data
 
 MEALIE_API_URL = os.getenv('MEALIE_API_URL', 'http://mealie:9000')
 MEALIE_FRONTEND_URL = os.getenv('MEALIE_FRONTEND_URL', 'https://mealie.cosmoslab.dev')
-STATE_FILE = "/mealie-data/planner_state.json"
+STATE_FILE = "data/planner_state.json"
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'mealie_companion_secret_9926')

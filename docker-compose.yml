@@ -7,6 +7,7 @@ services:
       - "9926:9926"
     volumes:
       - mealie_mealie-data:/mealie-data:ro
+      - ./data:/app/data
     env_file:
       - .env
     networks:
