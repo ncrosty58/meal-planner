@@ -124,9 +124,9 @@ def index():
         planning_dates = [(start_date_obj + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
 
         # Format the active_list_id as a hyphenated UUID for the frontend link
-        formatted_list_id = active_list_id
-        if len(active_list_id) == 32:
-            formatted_list_id = f"{active_list_id[:8]}-{active_list_id[8:12]}-{active_list_id[12:16]}-{active_list_id[16:20]}-{active_list_id[20:]}"
+        formatted_list_id = ACTIVE_LIST_ID
+        if len(ACTIVE_LIST_ID) == 32:
+            formatted_list_id = f"{ACTIVE_LIST_ID[:8]}-{ACTIVE_LIST_ID[8:12]}-{ACTIVE_LIST_ID[12:16]}-{ACTIVE_LIST_ID[16:20]}-{ACTIVE_LIST_ID[20:]}"
 
         return render_template(
             'index.html',
