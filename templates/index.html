@@ -84,8 +84,54 @@
             letter-spacing: -0.03em;
         }
 
+        /* Tabs Navigation */
+        .tabs-container {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-glow);
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 0.75rem 1rem;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .tab-btn.active {
+            background: var(--bg-surface);
+            color: var(--color-primary);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .tab-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-main);
+        }
+
+        /* Layout Structure */
+        .content-wrapper {
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
         .hamburger-btn {
-            display: none;
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--border-glow);
             color: var(--text-main);
@@ -103,16 +149,23 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        @media (max-width: 968px) {
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+            animation: fadeInDown 0.8s ease-out;
+            position: relative;
+        }
+
+        @media (max-width: 600px) {
             header {
-                text-align: left;
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 0.5rem;
                 padding-right: 60px;
             }
             .hamburger-btn {
-                display: flex !important;
                 position: absolute;
                 top: 0;
                 right: 0;
@@ -142,45 +195,33 @@
 
         /* Side Drawer Wrapper */
         .side-drawer {
+            position: fixed;
+            top: 0;
+            right: -100%;
+            width: 88%;
+            max-width: 450px;
+            height: 100vh;
+            background: #0B0F19;
+            z-index: 1005;
+            overflow-y: auto;
+            padding: 5rem 1.5rem 2rem 1.5rem;
+            box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+            border-left: 1px solid var(--border-glow);
             transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        @media (max-width: 968px) {
-            .side-drawer {
-                position: fixed;
-                top: 0;
-                right: -100%;
-                width: 88%;
-                max-width: 400px;
-                height: 100vh;
-                background: #0B0F19;
-                z-index: 1005;
-                overflow-y: auto;
-                padding: 5rem 1.5rem 2rem 1.5rem;
-                box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
-                border-left: 1px solid var(--border-glow);
-            }
-
-            .side-drawer.active {
-                right: 0;
-            }
+        .side-drawer.active {
+            right: 0;
         }
 
         .drawer-close {
-            display: none;
             position: absolute;
             top: 1.5rem;
             right: 1.5rem;
-            font-size: 2rem;
+            font-size: 2.2rem;
             color: var(--text-muted);
             cursor: pointer;
             line-height: 1;
-        }
-
-        @media (max-width: 968px) {
-            .drawer-close {
-                display: block;
-            }
         }
 
         header p {
@@ -846,11 +887,19 @@
         
         <!-- STATE B: ACTIVE WEEK DASHBOARD -->
         
-        <div class="dashboard-grid">
-            
-            <!-- Column 1: Primary Content (Weekly Calendar) -->
-            <div>
-                <!-- Weekly Calendar Card -->
+        <div class="content-wrapper">
+            <!-- Tabs Navigation -->
+            <div class="tabs-container">
+                <button type="button" id="btn-menu" class="tab-btn active" onclick="switchTab('menu')">
+                    📅 Weekly Menu
+                </button>
+                <button type="button" id="btn-shopping" class="tab-btn" onclick="switchTab('shopping')">
+                    🛒 Shopping List
+                </button>
+            </div>
+
+            <!-- Tab 1: Weekly Menu -->
+            <div id="tab-menu" class="tab-content">
                 <div class="card">
                     <div class="card-title">
                         📅 Weekly Menu Calendar
@@ -923,11 +972,8 @@
                 </div>
             </div>
 
-            <!-- Column 2: Secondary Content / Mobile Drawer (LIVE Shopping List, Controls, & Nutrition) -->
-            <aside id="side-drawer" class="side-drawer">
-                <span class="drawer-close" id="drawer-close" onclick="toggleDrawer(event)">&times;</span>
-
-                <!-- LIVE Shopping List Card (Moved to Top) -->
+            <!-- Tab 2: Live Shopping List -->
+            <div id="tab-shopping" class="tab-content" style="display: none;">
                 <div class="card">
                     <div class="card-title">
                         🛒 Live Shopping List
@@ -956,77 +1002,82 @@
                         <a href="{{ mealie_url }}/shopping-lists/{{ active_list_id }}" class="btn btn-secondary" style="font-size: 0.8rem;">View Full List in Mealie</a>
                     </div>
                 </div>
-
-                <!-- Planner Controls Card -->
-                <div class="card">
-                    <div class="card-title">
-                        ⚙️ Planner Controls
-                    </div>
-                    <div class="controls-grid">
-                        <!-- Group 1: Shopping & Inventory -->
-                        <div>
-                            <div class="control-group-label">Shopping & Inventory</div>
-                            <div class="control-group-buttons">
-                                <a href="{{ mealie_url }}/shopping-lists/{{ active_list_id }}" class="btn btn-primary" style="background: linear-gradient(135deg, var(--color-success) 0%, #059669 100%); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">🛒 Open Shopping List</a>
-
-                                <button type="button" class="btn btn-secondary" onclick="openStaplesModal()">📋 Manage Staples</button>
-                            </div>
-                        </div>
-
-                        <!-- Group 2: System -->
-                        <div>
-                            <div class="control-group-label">System</div>
-                            <div class="control-group-buttons">
-                                <a href="{{ mealie_url }}" class="btn btn-secondary">🌐 Open Mealie UI</a>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Group 3: Maintenance & Destructive Actions -->
-                    <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(239, 68, 68, 0.1);">
-                        <div class="control-group-label" style="color: var(--color-danger);">Maintenance & Destructive Actions</div>
-                        <div class="control-group-buttons" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-                            <form action="{{ url_for('sync') }}" method="POST" id="sync-list-form">
-                                <button type="submit" class="btn btn-secondary" style="border-color: rgba(239, 68, 68, 0.2);">🔄 Update Shopping List</button>
-                            </form>
-
-                            <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('ARE YOU SURE? This will delete all current and next week meal plans and clear the active shopping list.');">
-                                <button type="submit" class="btn btn-danger">🗑️ Clear & Reset Plan</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Nutrition Analysis Card -->
-                <div class="card">
-                    <div class="card-title">
-                        📊 Nutrition Forecast
-                    </div>
-                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: -1rem; margin-bottom: 1.5rem;">
-                        Family daily averages compared to Recommended Daily Allowances (RDAs)
-                    </p>
-
-                    {% for key, rda_val in rda.items() %}
-                        {% set avg = averages.get(key, 0.0) %}
-                        {% set pct = ((avg / rda_val) * 100) | round | int if rda_val > 0 else 0 %}
-                        {% set unit = 'g' %}
-                        {% if key == 'calories' %}{% set unit = 'kcal' %}{% elif key in ['sodium', 'cholesterol'] %}{% set unit = 'mg' %}{% endif %}
-
-                        <div class="nutrition-row">
-                            <div class="nutrition-header">
-                                <span class="nutrient-name" style="text-transform: capitalize;">{{ key }}</span>
-                                <span class="nutrient-value">
-                                    <strong>{{ avg }}</strong> / {{ rda_val }} {{ unit }} ({{ pct }}%)
-                                </span>
-                            </div>
-                            <div class="progress-bar-bg">
-                                <div class="progress-bar-fill bg-{{ key }}" style="width: {% if pct > 100 %}100{% else %}{{ pct }}{% endif %}%;"></div>
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
-            </aside>
+            </div>
         </div>
+
+        <!-- Universal Side Drawer (Controls & Nutrition) -->
+        <aside id="side-drawer" class="side-drawer">
+            <span class="drawer-close" id="drawer-close" onclick="toggleDrawer(event)">&times;</span>
+
+            <!-- Planner Controls Card -->
+            <div class="card">
+                <div class="card-title">
+                    ⚙️ Tools & Settings
+                </div>
+                <div class="controls-grid">
+                    <!-- Group 1: Shopping & Inventory -->
+                    <div>
+                        <div class="control-group-label">Shopping & Inventory</div>
+                        <div class="control-group-buttons">
+                            <a href="{{ mealie_url }}/shopping-lists/{{ active_list_id }}" class="btn btn-primary" style="background: linear-gradient(135deg, var(--color-success) 0%, #059669 100%); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">🛒 Open Shopping List</a>
+
+                            <button type="button" class="btn btn-secondary" onclick="openStaplesModal()">📋 Manage Staples</button>
+                        </div>
+                    </div>
+
+                    <!-- Group 2: System -->
+                    <div>
+                        <div class="control-group-label">System</div>
+                        <div class="control-group-buttons">
+                            <a href="{{ mealie_url }}" class="btn btn-secondary">🌐 Open Mealie UI</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Group 3: Maintenance & Destructive Actions -->
+                <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(239, 68, 68, 0.1);">
+                    <div class="control-group-label" style="color: var(--color-danger);">Maintenance & Destructive Actions</div>
+                    <div class="control-group-buttons" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                        <form action="{{ url_for('sync') }}" method="POST" id="sync-list-form">
+                            <button type="submit" class="btn btn-secondary" style="border-color: rgba(239, 68, 68, 0.2);">🔄 Update Shopping List</button>
+                        </form>
+
+                        <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('ARE YOU SURE? This will delete all current and next week meal plans and clear the active shopping list.');">
+                            <button type="submit" class="btn btn-danger">🗑️ Clear & Reset Plan</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Nutrition Analysis Card -->
+            <div class="card">
+                <div class="card-title">
+                    📊 Nutrition Forecast
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: -1rem; margin-bottom: 1.5rem;">
+                    Family daily averages compared to RDAs
+                </p>
+
+                {% for key, rda_val in rda.items() %}
+                    {% set avg = averages.get(key, 0.0) %}
+                    {% set pct = ((avg / rda_val) * 100) | round | int if rda_val > 0 else 0 %}
+                    {% set unit = 'g' %}
+                    {% if key == 'calories' %}{% set unit = 'kcal' %}{% elif key in ['sodium', 'cholesterol'] %}{% set unit = 'mg' %}{% endif %}
+
+                    <div class="nutrition-row">
+                        <div class="nutrition-header">
+                            <span class="nutrient-name" style="text-transform: capitalize;">{{ key }}</span>
+                            <span class="nutrient-value">
+                                <strong>{{ avg }}</strong> / {{ rda_val }} {{ unit }} ({{ pct }}%)
+                            </span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill bg-{{ key }}" style="width: {% if pct > 100 %}100{% else %}{{ pct }}{% endif %}%;"></div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </aside>
         {% endif %}
 
     <!-- Loading Overlay HTML -->
@@ -1079,6 +1130,30 @@
     </div>
 
     <script>
+        // --- UI NAVIGATION ---
+        
+        function switchTab(tabId) {
+            console.log('🔄 Switching tab to:', tabId);
+            
+            const btnMenu = document.getElementById('btn-menu');
+            const btnShopping = document.getElementById('btn-shopping');
+            const tabMenu = document.getElementById('tab-menu');
+            const tabShopping = document.getElementById('tab-shopping');
+            
+            if (!btnMenu || !btnShopping || !tabMenu || !tabShopping) return;
+
+            // Toggle Buttons
+            btnMenu.classList.toggle('active', tabId === 'menu');
+            btnShopping.classList.toggle('active', tabId === 'shopping');
+            
+            // Toggle Content
+            tabMenu.style.display = (tabId === 'menu') ? 'block' : 'none';
+            tabShopping.style.display = (tabId === 'shopping') ? 'block' : 'none';
+            
+            // Save state
+            localStorage.setItem('activeTab', tabId);
+        }
+
         // --- GLOBAL UTILITIES ---
         
         function toggleDrawer(e) {
@@ -1091,6 +1166,7 @@
             const drawerToggle = document.getElementById('drawer-toggle');
             
             if (sideDrawer && drawerOverlay) {
+                console.log('☰ Toggling Drawer');
                 sideDrawer.classList.toggle('active');
                 drawerOverlay.classList.toggle('active');
                 if (drawerToggle) drawerToggle.classList.toggle('active');
@@ -1114,8 +1190,10 @@
             const overlay = document.getElementById('loading-overlay');
             if (overlay) overlay.style.display = 'flex';
             // Hide progress details for simple actions
-            document.getElementById('progress-bar-container').style.display = 'none';
-            document.getElementById('loading-log').style.display = 'none';
+            const pb = document.getElementById('progress-bar-container');
+            const log = document.getElementById('loading-log');
+            if (pb) pb.style.display = 'none';
+            if (log) log.style.display = 'none';
         }
 
         // --- INTERACTIVITY ---
@@ -1123,7 +1201,11 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Mealie Planner UI Initializing...');
 
-            // 1. Live Shopping List Toggle
+            // 1. Restore Tab State
+            const lastTab = localStorage.getItem('activeTab') || 'menu';
+            switchTab(lastTab);
+
+            // 2. Live Shopping List Toggle
             document.querySelectorAll('.shopping-list-checkbox').forEach(checkbox => {
                 checkbox.addEventListener('change', async function() {
                     const itemId = this.getAttribute('data-id');
@@ -1153,27 +1235,27 @@
                 });
             });
 
-            // 2. Meal Update Spinners
+            // 3. Meal Update Spinners
             document.querySelectorAll('.select-recipe').forEach(select => {
                 select.addEventListener('change', function() {
                     if (this.value) showLoading('Updating Meal Plan...');
                 });
             });
 
-            // 3. Form Submission Spinners
+            // 4. Form Submission Spinners
             const syncForm = document.getElementById('sync-list-form');
             if (syncForm) syncForm.addEventListener('submit', () => showLoading('Syncing Shopping List...'));
             
             const staplesForm = document.getElementById('staples-form');
             if (staplesForm) staplesForm.addEventListener('submit', () => showLoading('Saving Staples...'));
 
-            // 4. Modal Click-away
+            // 5. Modal Click-away
             window.addEventListener('click', (e) => {
                 const modal = document.getElementById('staples-modal');
                 if (e.target === modal) closeStaplesModal();
             });
 
-            // 5. PWA Generation SSE
+            // 6. PWA Generation SSE
             const planForms = document.querySelectorAll('form[action*="/plan"]');
             planForms.forEach(form => {
                 form.addEventListener('submit', function(e) {
@@ -1218,7 +1300,7 @@
                 });
             });
 
-            // 6. Service Worker
+            // 7. Service Worker
             if ('serviceWorker' in navigator) {
                 window.addEventListener('load', () => {
                     navigator.serviceWorker.register('/sw.js');
