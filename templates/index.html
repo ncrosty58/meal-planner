@@ -399,12 +399,72 @@
         }
         .chat-box-panel.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
         
-        /* --- MOBILE ADAPTATIONS --- */
+        /* --- MOBILE ADAPTATIONS & HAMBURGER --- */
+        .hamburger-btn {
+            display: none;
+            background: transparent;
+            border: 1px solid var(--color-divider);
+            color: var(--color-primary);
+            font-size: 1.5rem;
+            width: 44px;
+            height: 44px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            cursor: pointer;
+            position: absolute;
+            top: 0;
+            right: 0;
+            z-index: 1010;
+        }
+
+        .side-drawer {
+            position: fixed;
+            top: 0;
+            right: -100%;
+            width: 80%;
+            max-width: 350px;
+            height: 100vh;
+            background: white;
+            z-index: 1005;
+            padding: 4rem 2rem;
+            box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
+            border-left: 1px solid var(--color-border);
+            transition: right 0.4s ease;
+        }
+
+        .side-drawer.active { right: 0; }
+
+        .drawer-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+        }
+        .drawer-overlay.active { display: block; }
+
+        .drawer-close {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            font-size: 2rem;
+            color: var(--color-muted);
+            cursor: pointer;
+        }
+
         @media (max-width: 768px) {
             .calendar-day-card { grid-template-columns: 1fr; gap: 1rem; }
             .card { padding: 1.5rem; }
-            .tabs-container { gap: 1rem; }
-            .tab-btn { font-size: 0.75rem; }
+            .tabs-container { display: none; } /* Hide tabs in favor of hamburger */
+            .hamburger-btn { display: flex; }
+            header { padding-right: 50px; text-align: left; }
+            header h1 { font-size: 2rem; }
+            .ornament { text-align: left; }
         }
 
         /* Loading Overlay */
@@ -424,16 +484,30 @@
     </style>
 </head>
 <body>
+    <!-- MOBILE NAVIGATION -->
+    <button class="hamburger-btn" id="hamburger-btn" onclick="toggleDrawer()">☰</button>
+    <div class="drawer-overlay" id="drawer-overlay" onclick="toggleDrawer()"></div>
+    <div class="side-drawer" id="side-drawer">
+        <span class="drawer-close" onclick="toggleDrawer()">&times;</span>
+        <div class="card-header" style="text-align: left; margin-bottom: 3rem;">
+            <span class="card-subtitle">Navigation</span>
+            <h2 class="card-title">Sections</h2>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('menu'); toggleDrawer()">Weekly Menu</button>
+            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('shopping'); toggleDrawer()">Shopping List</button>
+            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('prep'); toggleDrawer()">Prep Guide</button>
+        </div>
+    </div>
+
     <!-- LOADING OVERLAY -->
     <div id="loading-overlay" class="loading-overlay" style="display: none;">
         <div class="loading-spinner-container">
             <div class="loading-spinner"></div>
             <div id="loading-text" class="card-subtitle" style="margin-bottom: 1rem;">Preparing Your Menu</div>
-            
-            <div id="progress-bar-container" class="progress-bar-container" style="background: #E6DFD5; height: 2px; width: 200px; margin: 0 auto 1.5rem auto;">
+            <div id="progress-bar-container" style="background: #E6DFD5; height: 2px; width: 200px; margin: 0 auto 1.5rem auto;">
                 <div id="progress-bar-fill" style="background: var(--color-primary); height: 100%; width: 0%; transition: width 0.4s;"></div>
             </div>
-            
             <div id="loading-log" style="font-family: monospace; font-size: 10px; color: var(--color-muted); max-width: 300px; margin: 0 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;"></div>
         </div>
     </div>
@@ -442,7 +516,7 @@
         <header>
             <span class="brand-label">Culinary Companion</span>
             <h1>The Crosty Kitchen</h1>
-            <p>Nathan & Kristin's Private Menu & Planning Dashboard</p>
+            <p>Private Menu & Planning Dashboard</p>
             <div class="ornament">❖ ❖ ❖</div>
         </header>
 
@@ -460,78 +534,66 @@
         <!-- STATE A: QUESTIONNAIRE FORM -->
         <div class="card" style="max-width: 800px; margin: 0 auto;">
             <div class="card-header">
-                <span class="card-subtitle">Weekly Consultation</span>
-                <h2 class="card-title">Menu Preferences</h2>
+                <span class="card-subtitle">Consultation</span>
+                <h2 class="card-title">Weekly Preferences</h2>
                 <p style="font-size: 0.9rem; color: var(--color-muted);">{{ start_date }} to {{ end_date }}</p>
             </div>
             
-            <form action="{{ url_for('plan') }}" method="POST">
-                <!-- Opt Out of Meals -->
+            <form id="plan-form" onsubmit="submitPlanForm(event)">
                 <div style="margin-bottom: 2.5rem;">
                     <label class="brand-label" style="text-align: left; margin-bottom: 1rem;">Meal Exclusions</label>
-                    <textarea class="textarea-input" id="exclude_text" name="exclude_text" placeholder="e.g. Skip dinner on Monday, no breakfast on Friday..."></textarea>
+                    <textarea class="textarea-input" id="exclude_text" name="exclude_text" placeholder="e.g. Skip dinner on Monday..."></textarea>
                 </div>
-
-                <!-- Freezer/Pantry/Fridge Items -->
                 <div style="margin-bottom: 2.5rem;">
                     <label class="brand-label" style="text-align: left; margin-bottom: 1rem;">Inventory to Utilize</label>
-                    <textarea class="textarea-input" id="freezer_items" name="freezer_items" placeholder="e.g. frozen peas, pantry pasta, salmon..."></textarea>
+                    <textarea class="textarea-input" id="freezer_items" name="freezer_items" placeholder="e.g. salmon, frozen peas..."></textarea>
                 </div>
-
-                <!-- Special Requests -->
                 <div style="margin-bottom: 2.5rem;">
-                    <label class="brand-label" style="text-align: left; margin-bottom: 1rem;">Thematic Direction</label>
-                    <textarea class="textarea-input" id="special_requests" name="special_requests" placeholder="e.g. Mexican night, high fiber priority, want burgers..."></textarea>
+                    <label class="brand-label" style="text-align: left; margin-bottom: 1rem;">Special Requests</label>
+                    <textarea class="textarea-input" id="special_requests" name="special_requests" placeholder="e.g. High fiber priority..."></textarea>
                 </div>
-
                 <div style="text-align: center; margin-top: 3rem;">
-                    <button type="submit" class="btn btn-primary" style="padding: 1rem 3rem;">Curate Weekly Plan</button>
+                    <button type="submit" class="btn btn-primary" style="padding: 1rem 3rem;">Generate Plan</button>
                 </div>
             </form>
         </div>
-
         {% else %}
         
-        <!-- STATE B: ACTIVE WEEK DASHBOARD -->
-        
-        <!-- Tabs Navigation -->
+        <!-- ACTIVE DASHBOARD -->
         <div class="tabs-container">
-            <button type="button" id="btn-menu" class="tab-btn active" onclick="switchTab('menu')">Menu</button>
-            <button type="button" id="btn-shopping" class="tab-btn" onclick="switchTab('shopping')">Larder</button>
-            <button type="button" id="btn-prep" class="tab-btn" onclick="switchTab('prep')">Briefing</button>
+            <button type="button" id="btn-menu" class="tab-btn active" onclick="switchTab('menu')">Weekly Menu</button>
+            <button type="button" id="btn-shopping" class="tab-btn" onclick="switchTab('shopping')">Shopping List</button>
+            <button type="button" id="btn-prep" class="tab-btn" onclick="switchTab('prep')">Prep Guide</button>
         </div>
 
-        <!-- Tab 1: Weekly Menu -->
         <div id="tab-menu" class="tab-content">
             <div class="card">
                 <div class="card-header">
-                    <span class="card-subtitle">Week at a Glance</span>
-                    <h2 class="card-title">Seasonal Menu</h2>
+                    <span class="card-subtitle">Current Selection</span>
+                    <h2 class="card-title">Weekly Menu</h2>
                 </div>
-                
                 <div class="calendar-list">
                     {% for d_str in planning_dates %}
                         {% set day = d_str | select_day_name %}
                         {% set meals = {'breakfast': 'Skipped', 'lunch': 'Skipped', 'dinner': 'Skipped'} %}
                         {% set dinner_entry = [] %}
-                        
                         {% for item in meal_plans %}
                             {% if item.date[:10] == d_str %}
-                                {% if item.entryType == 'breakfast' %}
-                                    {% set _ = meals.update({'breakfast': item.title or 'Planned Breakfast'}) %}
-                                {% elif item.entryType == 'lunch' %}
-                                    {% set _ = meals.update({'lunch': item.title or 'Planned Lunch'}) %}
+                                {% if item.entryType == 'breakfast' %} {% set _ = meals.update({'breakfast': item.title or 'Planned Breakfast'}) %}
+                                {% elif item.entryType == 'lunch' %} {% set _ = meals.update({'lunch': item.title or 'Planned Lunch'}) %}
                                 {% elif item.entryType == 'dinner' %}
                                     {% set _ = dinner_entry.append(item) %}
-                                    {% if item.recipeId %}
-                                        {% set _ = meals.update({'dinner': item.recipe.name}) %}
-                                    {% elif item.title %}
-                                        {% set _ = meals.update({'dinner': item.title}) %}
+                                    {% if item.recipeId %} 
+                                        {% if item.recipe and item.recipe.name %}
+                                            {% set _ = meals.update({'dinner': item.recipe.name}) %}
+                                        {% else %}
+                                            {% set _ = meals.update({'dinner': 'Recipe Details Unavailable'}) %}
+                                        {% endif %}
+                                    {% elif item.title %} {% set _ = meals.update({'dinner': item.title}) %}
                                     {% endif %}
                                 {% endif %}
                             {% endif %}
                         {% endfor %}
-                        
                         <div class="calendar-day-card {% if d_str < today_str %}past-day{% endif %}">
                             <div class="day-info">
                                 <div class="day-name">{{ day }}</div>
@@ -540,20 +602,15 @@
                             <div class="meal-info">
                                 <div class="meal-desc"><strong>B:</strong> {{ meals.breakfast }}</div>
                                 <div class="meal-desc"><strong>L:</strong> {{ meals.lunch }}</div>
-                                <div class="dinner-title">
-                                    <strong>D:</strong> 
+                                <div class="dinner-title"><strong>D:</strong> 
                                     {% if dinner_entry and dinner_entry[0].recipeId %}
                                         {% if d_str < today_str %}
                                             {{ meals.dinner }}
                                         {% else %}
                                             <a href="{{ mealie_url }}/g/home/r/{{ dinner_entry[0].recipe.slug }}" class="dinner-link">{{ meals.dinner }}</a>
                                         {% endif %}
-                                        {% if dinner_entry[0].is_blackstone %}
-                                            <span class="griddle-badge">🍳 Griddle</span>
-                                        {% endif %}
-                                    {% else %}
-                                        {{ meals.dinner }}
-                                    {% endif %}
+                                        {% if dinner_entry[0].is_blackstone %}<span class="griddle-badge">🍳 Griddle</span>{% endif %}
+                                    {% else %}{{ meals.dinner }}{% endif %}
                                 </div>
                             </div>
                             <div class="meal-action">
@@ -562,13 +619,9 @@
                                     <input type="hidden" name="date" value="{{ d_str }}">
                                     <input type="hidden" name="entry_id" value="{{ dinner_entry[0].id if dinner_entry else '' }}">
                                     <select name="recipe_id" class="select-recipe" onchange="this.form.submit()">
-                                        <option value="">Edit Selection</option>
-                                        <option value="SKIP" {% if dinner_entry and not dinner_entry[0].recipeId %}selected{% endif %}>🚫 Eating Out</option>
-                                        {% for rec in all_recipes %}
-                                            <option value="{{ rec.id }}" {% if dinner_entry and rec.id == dinner_entry[0].recipeId %}selected{% endif %}>
-                                                {{ rec.name }}
-                                            </option>
-                                        {% endfor %}
+                                        <option value="">Edit Dinner</option>
+                                        <option value="SKIP">🚫 Eating Out</option>
+                                        {% for rec in all_recipes %}<option value="{{ rec.id }}">{{ rec.name }}</option>{% endfor %}
                                     </select>
                                 </form>
                                 {% endif %}
@@ -577,142 +630,81 @@
                     {% endfor %}
                 </div>
             </div>
-            
-            <!-- Nutrition Summary Card -->
+
             <div class="card">
-                <div class="card-header">
-                    <span class="card-subtitle">Analysis</span>
-                    <h2 class="card-title">Nutritional Baseline</h2>
-                </div>
+                <div class="card-header"><span class="card-subtitle">Analysis</span><h2 class="card-title">Nutritional Baseline</h2></div>
                 <div class="nutrition-grid">
                     {% for k, rda_val in rda.items() %}
                         {% set avg_val = averages.get(k, 0.0) %}
                         {% set pct = ((avg_val / rda_val) * 100) | round | int if rda_val > 0 else 0 %}
-                        {% set status_color = 'var(--text-main)' %}
-                        {% if k == 'sodium' and pct > 100 %}{% set status_color = 'var(--color-danger)' %}{% endif %}
-                        {% if k == 'fiber' and pct < 100 %}{% set status_color = 'var(--color-accent)' %}{% endif %}
-                        
                         <div class="nut-badge">
                             <span class="nut-label">{{ k }}</span>
                             <span class="nut-val">{{ avg_val }}{{ 'kcal' if k == 'calories' else ('mg' if k in ['sodium', 'cholesterol'] else 'g') }}</span>
-                            <span class="nut-pct" style="color: {{ status_color }};">{{ pct }}%</span>
+                            <span class="nut-pct" style="color: {{ 'var(--color-danger)' if k == 'sodium' and pct > 100 else ('var(--color-accent)' if k == 'fiber' and pct < 100 else 'var(--text-main)') }};">{{ pct }}%</span>
                         </div>
                     {% endfor %}
                 </div>
             </div>
         </div>
 
-        <!-- Tab 2: Live Shopping List -->
         <div id="tab-shopping" class="tab-content" style="display: none;">
             <div class="card">
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom-style: solid;">
-                    <div style="text-align: left;">
-                        <span class="card-subtitle">Inventory Management</span>
-                        <h2 class="card-title">The Larder</h2>
-                    </div>
-                    <button type="button" class="btn btn-secondary" style="padding: 0.6rem 1rem;" onclick="copyShoppingList(this)">
-                        Copy List
-                    </button>
+                    <div style="text-align: left;"><span class="card-subtitle">Provisions</span><h2 class="card-title">Shopping List</h2></div>
+                    <button type="button" class="btn btn-secondary" style="padding: 0.6rem 1rem;" onclick="copyShoppingList(this)">Copy List</button>
                 </div>
-                
-                <!-- Quick Add Form -->
                 <div style="display: flex; gap: 0.5rem; margin-bottom: 2rem; background: #FAF9F6; padding: 1rem; border-radius: 4px;">
-                    <input type="text" id="quick-add-input" class="textarea-input" style="min-height: auto; padding: 0.75rem; border-color: #E6DFD5;" 
-                           placeholder="Provision an item (e.g. Milk, Bread)..." 
-                           onkeypress="if(event.key === 'Enter') quickAddShoppingItem()">
+                    <input type="text" id="quick-add-input" class="textarea-input" style="min-height: auto; padding: 0.75rem;" placeholder="Add an item..." onkeypress="if(event.key === 'Enter') quickAddShoppingItem()">
                     <button type="button" class="btn btn-primary" onclick="quickAddShoppingItem()">Add</button>
                 </div>
-
                 <div class="shopping-list-container">
-                    {% if not shopping_list %}
-                        <div style="text-align: center; padding: 3rem; color: var(--color-muted); font-style: italic;">
-                            Your larder is currently fully provisioned.
+                    {% set last_label = [None] %}
+                    {% for item in shopping_list %}
+                        {% if item.label and item.label.name != last_label[0] %}
+                            <div class="brand-label" style="text-align: left; padding: 1.5rem 0 0.5rem 0; border-bottom: 1px solid var(--color-border); margin-bottom: 0.5rem; color: var(--color-primary);">{{ item.label.name }}</div>
+                            {% if last_label.append(item.label.name) %}{% endif %}
+                        {% elif not item.label and last_label[0] != 'Uncategorized' %}
+                            <div class="brand-label" style="text-align: left; padding: 1.5rem 0 0.5rem 0; border-bottom: 1px solid var(--color-border); margin-bottom: 0.5rem; color: var(--color-muted);">General Items</div>
+                            {% if last_label.append('Uncategorized') %}{% endif %}
+                        {% endif %}
+                        <div class="shopping-item">
+                            <input type="checkbox" class="custom-checkbox shopping-list-checkbox" data-id="{{ item.id }}" {% if item.checked %}checked{% endif %}>
+                            <div class="shopping-item-text {% if item.checked %}checked-item{% endif %}">{{ item.note }}{% if '(Buy Organic)' in item.note %}<span class="griddle-badge" style="color: var(--color-success); border-color: #DDE8E4; background: #EEF3F1;">Organic</span>{% endif %}</div>
                         </div>
-                    {% else %}
-                        {% set last_label = [None] %}
-                        {% for item in shopping_list %}
-                            {% if item.label and item.label.name != last_label[0] %}
-                                <div class="brand-label" style="text-align: left; padding: 1.5rem 0 0.5rem 0; border-bottom: 1px solid var(--color-border); margin-bottom: 0.5rem; color: var(--color-primary);">
-                                    {{ item.label.name }}
-                                </div>
-                                {% if last_label.append(item.label.name) %}{% endif %}
-                            {% elif not item.label and last_label[0] != 'Uncategorized' %}
-                                <div class="brand-label" style="text-align: left; padding: 1.5rem 0 0.5rem 0; border-bottom: 1px solid var(--color-border); margin-bottom: 0.5rem; color: var(--color-muted);">
-                                    General Provisions
-                                </div>
-                                {% if last_label.append('Uncategorized') %}{% endif %}
-                            {% endif %}
-                            
-                            <div class="shopping-item">
-                                <input type="checkbox" class="custom-checkbox shopping-list-checkbox" 
-                                       data-id="{{ item.id }}" {% if item.checked %}checked{% endif %}>
-                                <div class="shopping-item-text {% if item.checked %}checked-item{% endif %}">
-                                    {{ item.note }}
-                                    {% if '(Buy Organic)' in item.note %}
-                                        <span class="griddle-badge" style="color: var(--color-success); border-color: #DDE8E4; background: #EEF3F1;">Organic</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        {% endfor %}
-                    {% endif %}
+                    {% endfor %}
                 </div>
             </div>
         </div>
 
-        <!-- Tab 3: Prep Guide -->
         <div id="tab-prep" class="tab-content" style="display: none;">
             <div class="card">
-                <div class="card-header">
-                    <span class="card-subtitle">Briefing</span>
-                    <h2 class="card-title">Chef's Notes</h2>
-                </div>
-                
+                <div class="card-header"><span class="card-subtitle">Instructional</span><h2 class="card-title">Prep Guide</h2></div>
                 {% set ns = namespace(prep_found=false) %}
                 {% for d_str in planning_dates %}
                     {% set day_prep_entries = [] %}
-                    {% for item in meal_plans %}
-                        {% if item.date[:10] == d_str and item.text %}
-                            {% set _ = day_prep_entries.append(item) %}
-                        {% endif %}
-                    {% endfor %}
-                    
+                    {% for item in meal_plans %}{% if item.date[:10] == d_str and item.text %}{% set _ = day_prep_entries.append(item) %}{% endif %}{% endfor %}
                     {% if day_prep_entries %}
                         {% set ns.prep_found = true %}
                         <div style="margin-bottom: 2.5rem;" class="{% if d_str < today_str %}past-day{% endif %}">
-                            <div class="brand-label" style="text-align: left; padding-bottom: 0.5rem; border-bottom: 1px solid var(--color-divider); margin-bottom: 1rem;">
-                                {{ d_str | select_day_name }} &bull; {{ d_str }}
-                            </div>
+                            <div class="brand-label" style="text-align: left; padding-bottom: 0.5rem; border-bottom: 1px solid var(--color-divider); margin-bottom: 1rem;">{{ d_str | select_day_name }} &bull; {{ d_str }}</div>
                             {% for entry in day_prep_entries %}
                                 <div style="padding: 1.5rem; background: #FAF9F6; border-radius: 4px; border-left: 3px solid var(--color-accent); margin-bottom: 1rem;">
-                                    <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem;">
-                                        {{ entry.title or (entry.recipe.name if entry.recipeId else 'Prep Note') }}
-                                    </div>
+                                    <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem;">{{ entry.title or (entry.recipe.name if entry.recipeId else 'Prep Note') }}</div>
                                     <div style="font-size: 1rem; color: var(--text-main); line-height: 1.7;">{{ entry.text }}</div>
                                 </div>
                             {% endfor %}
                         </div>
                     {% endif %}
                 {% endfor %}
-                
-                {% if not ns.prep_found %}
-                    <div style="text-align: center; padding: 3rem; color: var(--color-muted); font-style: italic;">
-                        No specialized preparation notes for this collection.
-                    </div>
-                {% endif %}
             </div>
         </div>
 
         <!-- SYSTEM CONTROLS -->
         <div style="margin-top: 4rem; padding: 2rem; border-top: 1px double var(--color-divider); display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
             <button type="button" class="btn btn-secondary" onclick="openStaplesModal()">📋 Manage Staples</button>
-            <form action="{{ url_for('sync') }}" method="POST">
-                <button type="submit" class="btn btn-secondary">🔄 Refresh Larder</button>
-            </form>
-            <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('Archive current menu and clear the larder?')">
-                <button type="submit" class="btn btn-danger">Archive Current Week</button>
-            </form>
+            <form action="{{ url_for('sync') }}" method="POST"><button type="submit" class="btn btn-secondary">🔄 Refresh List</button></form>
+            <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('Archive current week?')"><button type="submit" class="btn btn-danger">Archive Current Week</button></form>
         </div>
-        
         {% endif %}
     </div>
 
@@ -720,26 +712,18 @@
     <div id="staples-modal" class="modal" style="display: none;">
         <div class="modal-content" style="background: white; border-radius: 4px; padding: 3rem; max-width: 700px;">
             <span class="close-btn" onclick="closeStaplesModal()">&times;</span>
-            <div class="card-header" style="text-align: left;">
-                <span class="card-subtitle">Inventory Control</span>
-                <h2 class="card-title">Household Staples</h2>
-                <p style="font-size: 0.9rem; color: var(--color-muted);">Select items that are currently running low.</p>
-            </div>
-            
+            <div class="card-header" style="text-align: left;"><span class="card-subtitle">Inventory</span><h2 class="card-title">Household Staples</h2></div>
             <form id="staples-form" action="{{ url_for('sync') }}" method="POST">
                 <input type="hidden" name="staples_submitted" value="1">
                 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; max-height: 400px; overflow-y: auto; padding: 1rem; background: #FAF9F6; border: 1px solid var(--color-border); margin-bottom: 2rem;">
                     {% for item in staples %}
                         <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; cursor: pointer;">
-                            <input type="checkbox" name="low_staples" value="{{ item.id }}" class="custom-checkbox"
-                                   {% if item.id in low_staples or item.id.replace('-', '') in low_staples %}checked{% endif %}>
+                            <input type="checkbox" name="low_staples" value="{{ item.id }}" class="custom-checkbox" {% if item.id in low_staples or item.id.replace('-', '') in low_staples %}checked{% endif %}>
                             <span style="font-size: 0.9rem;">{{ item.note }}</span>
                         </label>
                     {% endfor %}
                 </div>
-                <div style="text-align: right;">
-                    <button type="submit" class="btn btn-primary">Update Provisions</button>
-                </div>
+                <div style="text-align: right;"><button type="submit" class="btn btn-primary">Update Provisions</button></div>
             </form>
         </div>
     </div>
@@ -748,31 +732,24 @@
     <div class="chat-widget-container">
         <div id="chat-panel" class="chat-box-panel">
             <div style="padding: 1.5rem; background: var(--color-primary); color: white; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <div style="font-family: var(--font-display); font-weight: 700; font-size: 1.2rem;">Kitchen Assistant</div>
-                    <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8;">Expert Culinary Guidance</div>
-                </div>
+                <div><div style="font-family: var(--font-display); font-weight: 700; font-size: 1.2rem;">Kitchen Assistant</div><div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8;">Expert Culinary Guidance</div></div>
                 <button id="chat-close" style="background: transparent; border: none; color: white; cursor: pointer; font-size: 1.5rem;">&times;</button>
             </div>
-            <div id="chat-messages" style="flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; background: #FAF9F6;">
-                <!-- Messages populate here -->
-            </div>
+            <div id="chat-messages" style="flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; background: #FAF9F6;"></div>
             <div style="padding: 1.25rem; border-top: 1px solid var(--color-border); display: flex; gap: 0.75rem;">
                 <input type="text" id="chat-input" class="textarea-input" style="min-height: auto; padding: 0.75rem;" placeholder="Ask your chef...">
                 <button id="chat-send" class="btn btn-primary" style="padding: 0.5rem 1rem;" disabled>Send</button>
             </div>
         </div>
-        <button id="chat-trigger" class="chat-trigger-btn">
-            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
-            </svg>
-        </button>
+        <button id="chat-trigger" class="chat-trigger-btn"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg></button>
     </div>
 
     <script>
-        // --- GLOBAL UTILITIES ---
-        
-        // Copy Shopping List
+        function toggleDrawer() {
+            document.getElementById('side-drawer').classList.toggle('active');
+            document.getElementById('drawer-overlay').classList.toggle('active');
+        }
+
         function copyShoppingList(btn) {
             const items = document.querySelectorAll('.shopping-item');
             const lines = [];
@@ -783,48 +760,73 @@
                     if (textSpan) lines.push(`- ${textSpan.innerText.trim()}`);
                 }
             });
-
             if (lines.length === 0) { alert("No items to copy."); return; }
-            const fullText = lines.join('\n');
-            
-            navigator.clipboard.writeText(fullText).then(() => {
+            navigator.clipboard.writeText(lines.join('\n')).then(() => {
                 const original = btn.innerText;
                 btn.innerText = "Copied!";
                 btn.style.background = "var(--color-accent)";
-                btn.style.color = "white";
-                setTimeout(() => { 
-                    btn.innerText = original; 
-                    btn.style.background = ""; 
-                    btn.style.color = "";
-                }, 2000);
+                setTimeout(() => { btn.innerText = original; btn.style.background = ""; }, 2000);
             });
         }
 
-        // Tab Switching
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('tab-' + tabId).style.display = 'block';
-            document.getElementById('btn-' + tabId).classList.add('active');
+            const tab = document.getElementById('tab-' + tabId);
+            if (tab) tab.style.display = 'block';
+            const btn = document.getElementById('btn-' + tabId);
+            if (btn) btn.classList.add('active');
             localStorage.setItem('activeTab', tabId);
         }
 
-        // Modals
         function openStaplesModal() { document.getElementById('staples-modal').style.display = 'flex'; }
         function closeStaplesModal() { document.getElementById('staples-modal').style.display = 'none'; }
 
-        // Interaction
-        document.addEventListener('DOMContentLoaded', function() {
-            const lastTab = localStorage.getItem('activeTab') || 'menu';
-            switchTab(lastTab);
+        function showLoading(msg, submsg='') {
+            document.getElementById('loading-overlay').style.display = 'flex';
+            document.getElementById('loading-text').innerText = msg;
+            document.getElementById('loading-log').innerText = submsg;
+            document.getElementById('progress-bar-fill').style.width = '10%';
+        }
 
-            // Checkbox sync
+        function submitPlanForm(e) {
+            e.preventDefault();
+            const form = e.target;
+            const params = new URLSearchParams(new FormData(form));
+            showLoading('Preparing Your Menu', 'Initializing connection...');
+            
+            const eventSource = new EventSource(`/plan-stream?${params.toString()}`);
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.status === 'complete') {
+                    eventSource.close();
+                    window.location.href = '/?success_msg=Menu Curated Successfully';
+                } else {
+                    if (data.status) document.getElementById('loading-log').innerText = data.status;
+                    if (data.progress) document.getElementById('progress-bar-fill').style.width = data.progress + '%';
+                }
+            };
+            eventSource.onerror = function() {
+                eventSource.close();
+                window.location.href = '/?error_msg=Menu generation encountered an error. Please check logs.';
+            };
+        }
+
+        async function quickAddShoppingItem() {
+            const input = document.getElementById('quick-add-input');
+            const note = input.value.trim();
+            if (!note) return;
+            const res = await fetch('/add-shopping-item', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note }) });
+            if (res.ok) window.location.reload();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            switchTab(localStorage.getItem('activeTab') || 'menu');
+
             document.querySelectorAll('.shopping-list-checkbox').forEach(cb => {
                 cb.addEventListener('change', async function() {
                     const textSpan = this.parentElement.querySelector('.shopping-item-text');
-                    if (this.checked) textSpan.classList.add('checked-item');
-                    else textSpan.classList.remove('checked-item');
-                    
+                    textSpan.classList.toggle('checked-item', this.checked);
                     await fetch('/toggle-shopping-item', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -833,7 +835,6 @@
                 });
             });
 
-            // --- CHAT LOGIC ---
             const chatTrigger = document.getElementById('chat-trigger');
             const chatPanel = document.getElementById('chat-panel');
             const chatClose = document.getElementById('chat-close');
@@ -850,45 +851,28 @@
                 msgDiv.style.borderRadius = '4px';
                 msgDiv.style.fontSize = '0.9rem';
                 msgDiv.style.maxWidth = '85%';
-                
-                if (sender === 'user') {
-                    msgDiv.style.alignSelf = 'flex-end';
-                    msgDiv.style.background = 'var(--color-divider)';
-                    msgDiv.style.color = 'var(--text-main)';
-                } else {
-                    msgDiv.style.alignSelf = 'flex-start';
-                    msgDiv.style.background = 'white';
-                    msgDiv.style.border = '1px solid var(--color-border)';
-                }
-                
+                msgDiv.style.alignSelf = sender === 'user' ? 'flex-end' : 'flex-start';
+                msgDiv.style.background = sender === 'user' ? 'var(--color-divider)' : 'white';
+                if (sender !== 'user') msgDiv.style.border = '1px solid var(--color-border)';
                 msgDiv.innerHTML = text;
                 chatMessages.appendChild(msgDiv);
                 chatMessages.scrollTop = chatMessages.scrollHeight;
-                
                 if (save) {
                     displayedMessages.push({sender, text});
                     localStorage.setItem('mealie_chat_messages', JSON.stringify(displayedMessages));
                 }
             }
 
-            // Simple load
             displayedMessages.forEach(m => appendMessage(m.sender, m.text, false));
-
             chatTrigger.addEventListener('click', () => chatPanel.classList.add('open'));
             chatClose.addEventListener('click', () => chatPanel.classList.remove('open'));
             chatInput.addEventListener('input', () => chatSend.disabled = !chatInput.value.trim());
-
             chatSend.addEventListener('click', async () => {
                 const text = chatInput.value.trim();
                 appendMessage('user', text);
                 chatInput.value = '';
                 chatSend.disabled = true;
-
-                const response = await fetch('/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, history: chatHistory })
-                });
+                const response = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, history: chatHistory }) });
                 const result = await response.json();
                 if (result.success) {
                     appendMessage('assistant', result.reply);
