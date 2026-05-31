@@ -152,7 +152,7 @@ class UnifiedMealieClient(MealieFetcher):
 
     def get_labels(self) -> List[Dict[str, Any]]:
         """Fetch all shopping list labels (legacy compatibility)."""
-        res = self._handle_request("GET", "/api/households/shopping/labels")
+        res = self._handle_request("GET", "/api/groups/labels")
         if isinstance(res, dict):
             return res.get('items', [])
         return []
