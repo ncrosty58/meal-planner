@@ -501,10 +501,24 @@
             <span class="card-subtitle">Navigation</span>
             <h2 class="card-title">Sections</h2>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('menu'); toggleDrawer()">Weekly Menu</button>
-            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('shopping'); toggleDrawer()">Shopping List</button>
-            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('prep'); toggleDrawer()">Prep Guide</button>
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('menu'); toggleDrawer()">📅 Weekly Menu</button>
+            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('shopping'); toggleDrawer()">🛒 Shopping List</button>
+            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('prep'); toggleDrawer()">👨‍🍳 Prep Guide</button>
+            
+            <div style="margin: 1.5rem 0 0.5rem 0; border-top: 1px double var(--color-divider); padding-top: 1.5rem;">
+                <span class="card-subtitle">Actions</span>
+            </div>
+            
+            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="openStaplesModal(); toggleDrawer()">📋 Manage Staples</button>
+            
+            <form action="{{ url_for('sync') }}" method="POST">
+                <button type="submit" class="btn btn-secondary" style="text-align: left; padding: 1rem; width: 100%;">🔄 Refresh List</button>
+            </form>
+            
+            <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('Archive current week?')">
+                <button type="submit" class="btn btn-danger" style="text-align: left; padding: 1rem; width: 100%;">📦 Archive Week</button>
+            </form>
         </div>
     </div>
 
@@ -707,12 +721,6 @@
             </div>
         </div>
 
-        <!-- SYSTEM CONTROLS -->
-        <div style="margin-top: 4rem; padding: 2rem; border-top: 1px double var(--color-divider); display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
-            <button type="button" class="btn btn-secondary" onclick="openStaplesModal()">📋 Manage Staples</button>
-            <form action="{{ url_for('sync') }}" method="POST"><button type="submit" class="btn btn-secondary">🔄 Refresh List</button></form>
-            <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('Archive current week?')"><button type="submit" class="btn btn-danger">Archive Current Week</button></form>
-        </div>
         {% endif %}
     </div>
 
