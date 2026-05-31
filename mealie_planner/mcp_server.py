@@ -104,14 +104,18 @@ def create_recipe_from_url(url: str) -> Dict[str, Any]:
                 # Use Mealie's NLP parser to structure the clean lines
                 parsed_results = mealie.parse_raw_ingredients(clean_lines)
                 
-                # Map to Mealie's reliable flat ID schema for PUT
+                # Map to Mealie's reliable nested object schema for PUT
                 update_ingredients = []
                 for item in parsed_results:
+                    unit = item.get('unit')
+                    food = item.get('food')
+                    
+                    # Mealie requires both ID and Name in nested objects for reliable structured updates
                     update_ingredients.append({
-                        "note": item.get('note') or item.get('display') or "",
+                        "note": item.get('note') or "",
                         "quantity": item.get('quantity', 0.0),
-                        "unitId": item.get('unit', {}).get('id') if item.get('unit') else None,
-                        "foodId": item.get('food', {}).get('id') if item.get('food') else None,
+                        "unit": {"id": unit['id'], "name": unit['name']} if unit and unit.get('id') else None,
+                        "food": {"id": food['id'], "name": food['name']} if food and food.get('id') else None,
                         "disableAmount": item.get('disableAmount', False)
                     })
                 
@@ -170,11 +174,15 @@ def create_recipe(
         
         update_ingredients = []
         for item in parsed_results:
+            unit = item.get('unit')
+            food = item.get('food')
+            
+            # Mealie requires both ID and Name in nested objects for reliable structured updates
             update_ingredients.append({
-                "note": item.get('note') or item.get('display') or "",
+                "note": item.get('note') or "",
                 "quantity": item.get('quantity', 0.0),
-                "unitId": item.get('unit', {}).get('id') if item.get('unit') else None,
-                "foodId": item.get('food', {}).get('id') if item.get('food') else None,
+                "unit": {"id": unit['id'], "name": unit['name']} if unit and unit.get('id') else None,
+                "food": {"id": food['id'], "name": food['name']} if food and food.get('id') else None,
                 "disableAmount": item.get('disableAmount', False)
             })
         
@@ -215,11 +223,15 @@ def update_recipe(
         
         update_ingredients = []
         for item in parsed_results:
+            unit = item.get('unit')
+            food = item.get('food')
+            
+            # Mealie requires both ID and Name in nested objects for reliable structured updates
             update_ingredients.append({
-                "note": item.get('note') or item.get('display') or "",
+                "note": item.get('note') or "",
                 "quantity": item.get('quantity', 0.0),
-                "unitId": item.get('unit', {}).get('id') if item.get('unit') else None,
-                "foodId": item.get('food', {}).get('id') if item.get('food') else None,
+                "unit": {"id": unit['id'], "name": unit['name']} if unit and unit.get('id') else None,
+                "food": {"id": food['id'], "name": food['name']} if food and food.get('id') else None,
                 "disableAmount": item.get('disableAmount', False)
             })
         
