@@ -74,6 +74,8 @@ class MealieClient:
 
     def update_shopping_list_item(self, item_id, payload):
         """Update a specific shopping list item."""
+        # Mealie often expects the full item object or specific fields.
+        # For 'checked', sending just {"checked": bool} to the item endpoint is usually enough.
         r = requests.put(f"{self.api_url}/api/households/shopping/items/{item_id}", json=payload, headers=self.headers)
         r.raise_for_status()
 

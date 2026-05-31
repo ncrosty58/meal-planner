@@ -86,21 +86,22 @@
 
         .hamburger-btn {
             display: none;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid var(--border-glow);
-            color: var(--text-main);
+            background: var(--color-primary);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
             font-size: 1.8rem;
-            width: 48px;
-            height: 48px;
+            width: 54px;
+            height: 54px;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 4px;
             cursor: pointer;
-            z-index: 1010;
+            z-index: 10000;
             transition: all 0.2s;
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
 
         @media (max-width: 968px) {
@@ -109,14 +110,13 @@
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 0.5rem;
-                padding-right: 60px;
+                padding-right: 70px;
             }
             .hamburger-btn {
-                display: flex;
+                display: flex !important;
                 position: fixed;
-                top: 1.5rem;
-                right: 1.5rem;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                top: 1rem;
+                right: 1rem;
             }
         }
 
@@ -923,9 +923,39 @@
                 </div>
             </div>
 
-            <!-- Column 2: Secondary Content / Mobile Drawer (Controls, Nutrition, & LIVE Shopping List) -->
+            <!-- Column 2: Secondary Content / Mobile Drawer (LIVE Shopping List, Controls, & Nutrition) -->
             <aside id="side-drawer" class="side-drawer">
                 <span class="drawer-close" id="drawer-close" onclick="toggleDrawer(event)">&times;</span>
+
+                <!-- LIVE Shopping List Card (Moved to Top) -->
+                <div class="card">
+                    <div class="card-title">
+                        🛒 Live Shopping List
+                    </div>
+                    <div class="shopping-list-container">
+                        {% if shopping_list %}
+                            {% for item in shopping_list %}
+                            <div class="shopping-item">
+                                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; width: 100%;">
+                                    <input type="checkbox" class="custom-checkbox shopping-list-checkbox" 
+                                           data-id="{{ item.id }}" {% if item.checked %}checked{% endif %}>
+                                    <span class="shopping-item-text {% if item.checked %}checked-item{% endif %}">
+                                        {% if item.quantity > 0 %}<strong>{{ item.quantity | float | round(2) | string | replace('.0', '') }}</strong> {% endif %}{{ item.note }}
+                                    </span>
+                                </label>
+                                {% if "buy organic" in item.note.lower() %}
+                                    <span class="organic-pill">Organic</span>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p style="color: var(--text-muted); font-size: 0.9rem; font-style: italic;">No items currently in active shopping list.</p>
+                        {% endif %}
+                    </div>
+                    <div style="margin-top: 1.5rem; text-align: center;">
+                        <a href="{{ mealie_url }}/shopping-lists/{{ active_list_id }}" class="btn btn-secondary" style="font-size: 0.8rem;">View Full List in Mealie</a>
+                    </div>
+                </div>
 
                 <!-- Planner Controls Card -->
                 <div class="card">
@@ -995,36 +1025,6 @@
                         </div>
                     {% endfor %}
                 </div>
-
-                <!-- LIVE Shopping List Card -->
-                <div class="card">
-                    <div class="card-title">
-                        🛒 Live Shopping List
-                    </div>
-                    <div class="shopping-list-container">
-                        {% if shopping_list %}
-                            {% for item in shopping_list %}
-                            <div class="shopping-item">
-                                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; width: 100%;">
-                                    <input type="checkbox" class="custom-checkbox shopping-list-checkbox" 
-                                           data-id="{{ item.id }}" {% if item.checked %}checked{% endif %}>
-                                    <span class="shopping-item-text {% if item.checked %}checked-item{% endif %}">
-                                        {% if item.quantity > 0 %}<strong>{{ item.quantity | float | round(2) | string | replace('.0', '') }}</strong> {% endif %}{{ item.note }}
-                                    </span>
-                                </label>
-                                {% if "buy organic" in item.note.lower() %}
-                                    <span class="organic-pill">Organic</span>
-                                {% endif %}
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                            <p style="color: var(--text-muted); font-size: 0.9rem; font-style: italic;">No items currently in active shopping list.</p>
-                        {% endif %}
-                    </div>
-                    <div style="margin-top: 1.5rem; text-align: center;">
-                        <a href="{{ mealie_url }}/shopping-lists/{{ active_list_id }}" class="btn btn-secondary" style="font-size: 0.8rem;">View Full List in Mealie</a>
-                    </div>
-                </div>
             </aside>
         </div>
         {% endif %}
@@ -1079,7 +1079,7 @@
     </div>
 
     <script>
-        // --- UI UTILITIES ---
+        // --- GLOBAL UTILITIES ---
         
         function toggleDrawer(e) {
             if (e) {
@@ -1091,7 +1091,6 @@
             const drawerToggle = document.getElementById('drawer-toggle');
             
             if (sideDrawer && drawerOverlay) {
-                console.log('☰ Toggling Drawer');
                 sideDrawer.classList.toggle('active');
                 drawerOverlay.classList.toggle('active');
                 if (drawerToggle) drawerToggle.classList.toggle('active');
@@ -1100,18 +1099,130 @@
         }
 
         function openStaplesModal() {
-...
-                const sideDrawer = document.getElementById('side-drawer');
-                const drawerOverlay = document.getElementById('drawer-overlay');
+            const modal = document.getElementById('staples-modal');
+            if (modal) modal.style.display = 'flex';
+        }
 
-                if (drawerToggle && sideDrawer && drawerOverlay) {
-                    console.log('✅ Drawer elements initialized.');
-                    drawerToggle.addEventListener('click', toggleDrawer);
-                    if (drawerClose) drawerClose.addEventListener('click', toggleDrawer);
-                    drawerOverlay.addEventListener('click', toggleDrawer);
-                }
-            } catch (err) {
-                console.error('Initialization error:', err);
+        function closeStaplesModal() {
+            const modal = document.getElementById('staples-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function showLoading(text) {
+            const textEl = document.getElementById('loading-text');
+            if (textEl) textEl.innerText = text;
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) overlay.style.display = 'flex';
+            // Hide progress details for simple actions
+            document.getElementById('progress-bar-container').style.display = 'none';
+            document.getElementById('loading-log').style.display = 'none';
+        }
+
+        // --- INTERACTIVITY ---
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Mealie Planner UI Initializing...');
+
+            // 1. Live Shopping List Toggle
+            document.querySelectorAll('.shopping-list-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', async function() {
+                    const itemId = this.getAttribute('data-id');
+                    const isChecked = this.checked;
+                    const textSpan = this.parentElement.querySelector('.shopping-item-text');
+
+                    // Visual Feedback
+                    if (isChecked) textSpan.classList.add('checked-item');
+                    else textSpan.classList.remove('checked-item');
+
+                    try {
+                        const response = await fetch('/toggle-shopping-item', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ item_id: itemId, checked: isChecked })
+                        });
+                        const result = await response.json();
+                        if (!result.success) throw new Error(result.error);
+                    } catch (error) {
+                        console.error('Sync error:', error);
+                        // Revert on error
+                        this.checked = !isChecked;
+                        if (this.checked) textSpan.classList.add('checked-item');
+                        else textSpan.classList.remove('checked-item');
+                        alert('Error syncing with Mealie. Please refresh.');
+                    }
+                });
+            });
+
+            // 2. Meal Update Spinners
+            document.querySelectorAll('.select-recipe').forEach(select => {
+                select.addEventListener('change', function() {
+                    if (this.value) showLoading('Updating Meal Plan...');
+                });
+            });
+
+            // 3. Form Submission Spinners
+            const syncForm = document.getElementById('sync-list-form');
+            if (syncForm) syncForm.addEventListener('submit', () => showLoading('Syncing Shopping List...'));
+            
+            const staplesForm = document.getElementById('staples-form');
+            if (staplesForm) staplesForm.addEventListener('submit', () => showLoading('Saving Staples...'));
+
+            // 4. Modal Click-away
+            window.addEventListener('click', (e) => {
+                const modal = document.getElementById('staples-modal');
+                if (e.target === modal) closeStaplesModal();
+            });
+
+            // 5. PWA Generation SSE
+            const planForms = document.querySelectorAll('form[action*="/plan"]');
+            planForms.forEach(form => {
+                form.addEventListener('submit', function(e) {
+                    if (form.method.toLowerCase() !== 'post' || form.id === 'staples-form') return;
+                    e.preventDefault();
+                    
+                    const formData = new FormData(form);
+                    const params = new URLSearchParams(formData);
+                    
+                    const logEl = document.getElementById('loading-log');
+                    const barEl = document.getElementById('progress-bar-fill');
+                    const textEl = document.getElementById('loading-text');
+                    const subtextEl = document.getElementById('loading-subtext');
+                    const barContainer = document.getElementById('progress-bar-container');
+                    
+                    if (textEl) textEl.innerText = 'Generating Weekly Plan...';
+                    if (logEl) { logEl.innerHTML = ''; logEl.style.display = 'block'; }
+                    if (barContainer) barContainer.style.display = 'block';
+                    if (barEl) barEl.style.width = '0%';
+                    
+                    document.getElementById('loading-overlay').style.display = 'flex';
+                    
+                    const eventSource = new EventSource('/plan-stream?' + params.toString());
+                    eventSource.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        if (data.status === 'complete') {
+                            eventSource.close();
+                            window.location.href = '/?success_msg=Success!';
+                        } else if (data.status.startsWith('Error')) {
+                            eventSource.close();
+                            document.getElementById('loading-overlay').style.display = 'none';
+                            alert(data.status);
+                        } else {
+                            if (subtextEl) subtextEl.innerText = data.status;
+                            if (barEl) barEl.style.width = data.progress + '%';
+                            if (logEl) {
+                                logEl.innerHTML += `[${new Date().toLocaleTimeString()}] ${data.status}\n`;
+                                logEl.scrollTop = logEl.scrollHeight;
+                            }
+                        }
+                    };
+                });
+            });
+
+            // 6. Service Worker
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('/sw.js');
+                });
             }
         });
     </script>

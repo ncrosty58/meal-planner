@@ -324,11 +324,21 @@ def toggle_shopping_item():
         is_checked = data.get('checked')
         
         client = MealieClient()
-        # To avoid data loss on PUT, we should ideally fetch the current item details 
-        # but Mealie items are usually returned as a flat list from the main list endpoint.
-        # We'll just send the update payload for the 'checked' field.
-        payload = {"checked": is_checked}
-        client.update_shopping_list_item(item_id, payload)
+        
+        # 1. Fetch current items from the active list to find the full item object
+        # Mealie's PUT /api/households/shopping/items/{id} often requires the full object 
+        # to avoid stripping fields like labels or notes.
+        items = client.get_shopping_list_items(ACTIVE_LIST_ID)
+        target_item = next((item for item in items if item['id'] == item_id), None)
+        
+        if not target_item:
+            return json.dumps({"success": False, "error": "Item not found"}), 404
+            
+        # 2. Update ONLY the checked field in the local copy
+        target_item['checked'] = is_checked
+        
+        # 3. Send the full updated object back to Mealie
+        client.update_shopping_list_item(item_id, target_item)
         
         return json.dumps({"success": True})
     except Exception as e:
