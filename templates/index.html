@@ -2,35 +2,30 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mealie Planner Companion</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mealie Companion</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
     <meta name="theme-color" content="#F4F0EB">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='favicon.svg') }}">
-    <!-- Mobile App Meta Tags -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Mealie Planner">
-    <meta name="mobile-web-app-capable" content="yes">
-    <!-- Google Fonts -->
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,700;0,800;1,400&display=swap" rel="stylesheet">
     
     <style>
         :root {
-            /* Palette: Restaurant/Culinary Premium */
-            --bg-base: #F4F0EB;
+            --bg-app: #F4F0EB;
+            --bg-sidebar: #FFFFFF;
             --bg-card: #FFFFFF;
+            
             --color-primary: #3C5A54; /* Deep Sage */
             --color-accent: #C66B3D;  /* Terracotta */
             --color-muted: #8C8273;   /* Stone */
-            --color-divider: #D5CEB8; /* Antique Gold/Sand */
             --color-border: #E6DFD5;
+            --color-divider: #D5CEB8;
             
             --color-success: #3C5A54;
-            --color-info: #5B7B7A;
             --color-danger: #EF5350;
             
             --text-main: #2C2C2C;
@@ -39,770 +34,357 @@
             --font-display: 'Playfair Display', serif;
             --font-body: 'Plus Jakarta Sans', sans-serif;
             
-            --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.05);
-            --shadow-bold: 0 10px 40px rgba(60, 90, 84, 0.1);
+            --sidebar-width: 280px;
+            --border-radius: 4px;
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 20px rgba(0,0,0,0.06);
         }
 
-        /* --- GLOBAL RESET --- */
+        /* --- LAYOUT SHELL --- */
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        
         body {
-            background-color: var(--bg-base);
+            background-color: var(--bg-app);
             font-family: var(--font-body);
             color: var(--text-main);
-            min-height: 100vh;
-            padding: 3rem 1.5rem;
-            line-height: 1.6;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
         }
 
-        .container { max-width: 1100px; margin: 0 auto; }
-
-        /* --- TYPOGRAPHY --- */
-        h1, h2, h3, .brand-font {
-            font-family: var(--font-display);
-            font-weight: 800;
-            letter-spacing: -0.01em;
+        /* --- SIDEBAR --- */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--color-border);
+            display: flex;
+            flex-direction: column;
+            padding: 2rem 1.25rem;
+            flex-shrink: 0;
+            z-index: 100;
         }
 
-        /* --- HEADER --- */
-        header {
-            text-align: center;
-            margin-bottom: 4rem;
-            position: relative;
+        .sidebar-brand {
+            margin-bottom: 2.5rem;
         }
 
-        header .brand-label {
-            font-size: 11px;
+        .brand-label {
+            font-size: 10px;
             font-weight: 700;
             color: var(--color-accent);
             text-transform: uppercase;
-            letter-spacing: 2.5px;
+            letter-spacing: 2px;
             display: block;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.25rem;
         }
 
-        header h1 {
-            font-size: clamp(2rem, 6vw, 3.5rem);
+        .brand-title {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
             color: var(--color-primary);
-            margin-bottom: 0.75rem;
+            font-weight: 800;
         }
 
-        header p {
-            font-size: 1rem;
-            color: var(--color-muted);
-            font-weight: 400;
-            font-style: italic;
-        }
-
-        /* --- TABS --- */
-        .tabs-container {
+        .nav-group {
             display: flex;
-            justify-content: center;
-            gap: 2rem;
-            margin-bottom: 3rem;
-            border-bottom: 1px solid var(--color-border);
-            padding-bottom: 0.5rem;
+            flex-direction: column;
+            gap: 0.25rem;
+            flex: 1;
         }
 
-        .tab-btn {
-            background: transparent;
-            border: none;
-            color: var(--color-muted);
-            padding: 1rem 0;
-            font-family: var(--font-body);
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            text-decoration: none;
+            color: var(--text-muted);
             font-weight: 600;
             font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            cursor: pointer;
-            position: relative;
-            transition: all 0.3s ease;
-        }
-
-        .tab-btn.active {
-            color: var(--color-primary);
-        }
-
-        .tab-btn.active::after {
-            content: '';
-            position: absolute;
-            bottom: -0.6rem;
-            left: 0;
+            border-radius: var(--border-radius);
+            transition: all 0.2s;
+            background: transparent;
+            border: none;
             width: 100%;
-            height: 2px;
-            background: var(--color-primary);
+            cursor: pointer;
+            text-align: left;
         }
 
-        .tab-btn:hover:not(.active) {
+        .nav-item:hover {
+            background: #F8F6F2;
             color: var(--text-main);
+        }
+
+        .nav-item.active {
+            background: var(--color-primary);
+            color: white;
+            box-shadow: 0 4px 12px rgba(60, 90, 84, 0.15);
+        }
+
+        .sidebar-footer {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px double var(--color-divider);
+        }
+
+        /* --- MAIN CONTENT --- */
+        .main-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem 2.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
         }
 
         /* --- CARDS --- */
         .card {
             background: var(--bg-card);
-            border-radius: 4px; /* Classic sharp-ish edges */
-            padding: 3rem;
+            border-radius: var(--border-radius);
             border: 1px solid var(--color-border);
-            box-shadow: var(--shadow-soft);
-            margin-bottom: 2rem;
-            position: relative;
+            box-shadow: var(--shadow-sm);
+            padding: 1.5rem;
         }
 
         .card-header {
-            text-align: center;
-            padding-bottom: 2rem;
-            margin-bottom: 2rem;
-            border-bottom: 1px double var(--color-divider);
+            margin-bottom: 1.25rem;
+            border-bottom: 1px solid var(--color-border);
+            padding-bottom: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
         }
 
         .card-title {
             font-family: var(--font-display);
-            font-size: 1.75rem;
-            color: var(--color-primary);
-            margin-bottom: 0.25rem;
-        }
-
-        .card-subtitle {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: var(--color-accent);
-            font-weight: 700;
-        }
-
-        /* --- CALENDAR --- */
-        .calendar-list {
-            display: flex;
-            flex-direction: column;
-            gap: 0; /* Stacked look */
-        }
-
-        .calendar-day-card {
-            display: grid;
-            grid-template-columns: 140px 1fr 200px;
-            gap: 2rem;
-            padding: 2rem 0;
-            border-bottom: 1px solid var(--color-border);
-            align-items: flex-start;
-        }
-
-        .calendar-day-card:last-child { border-bottom: none; }
-
-        .day-info .day-name {
-            font-family: var(--font-display);
             font-size: 1.4rem;
             color: var(--color-primary);
-            font-weight: 700;
         }
 
-        .day-info .day-date {
-            font-size: 0.8rem;
-            color: var(--color-muted);
-            margin-top: 0.2rem;
-        }
-
-        .meal-desc {
-            font-size: 0.95rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .meal-desc strong {
-            font-weight: 600;
-            color: var(--color-muted);
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-right: 0.5rem;
-        }
-
-        .dinner-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--text-main);
-        }
-
-        .dinner-link {
-            color: var(--color-accent);
-            text-decoration: none;
-            border-bottom: 1px solid transparent;
-            transition: border 0.2s;
-        }
-        .dinner-link:hover { border-bottom-color: var(--color-accent); }
-
-        .griddle-badge {
-            font-size: 10px;
-            font-weight: 700;
-            background: #FAF9F6;
-            color: var(--color-accent);
-            padding: 2px 8px;
-            border: 1px solid #F2EEE8;
-            border-radius: 2px;
-            margin-left: 8px;
-            text-transform: uppercase;
-        }
-
-        /* --- FORMS & INPUTS --- */
-        .select-recipe {
-            width: 100%;
-            padding: 0.6rem;
-            border: 1px solid var(--color-border);
-            background: #FAF9F6;
-            font-family: var(--font-body);
-            font-size: 0.85rem;
-            color: var(--text-main);
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .select-recipe:focus { outline: none; border-color: var(--color-muted); }
-
-        .textarea-input {
-            width: 100%;
-            background: #FAF9F6;
-            border: 1px solid var(--color-border);
-            padding: 1.25rem;
-            font-family: var(--font-body);
-            font-size: 1rem;
-            min-height: 120px;
-            border-radius: 4px;
-            transition: border-color 0.3s;
-        }
-        .textarea-input:focus { outline: none; border-color: var(--color-muted); }
-
-        /* --- BUTTONS --- */
-        .btn {
-            font-family: var(--font-body);
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            font-size: 0.8rem;
-            padding: 0.8rem 1.5rem;
-            border-radius: 2px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: none;
-            display: inline-block;
-        }
-
-        .btn-primary {
-            background: var(--color-primary);
-            color: white;
-        }
-        .btn-primary:hover { transform: translateY(-1px); filter: brightness(1.1); box-shadow: 0 4px 15px rgba(60, 90, 84, 0.2); }
-
-        .btn-secondary {
-            background: white;
-            border: 1px solid var(--color-divider);
-            color: var(--color-muted);
-        }
-        .btn-secondary:hover { background: #FAF9F6; color: var(--text-main); }
-
-        .btn-danger {
-            background: transparent;
-            color: var(--color-danger);
-            border: 1px solid var(--color-danger);
-        }
-        .btn-danger:hover { background: var(--color-danger); color: white; }
-
-        /* --- SHOPPING LIST --- */
-        .shopping-item {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 1rem 0;
+        /* --- MENU TABLE --- */
+        .menu-table { width: 100%; border-collapse: collapse; }
+        .menu-row {
             border-bottom: 1px solid #FAF9F6;
+            display: grid;
+            grid-template-columns: 130px 1fr 200px;
+            padding: 1rem 0;
+            gap: 1.5rem;
+            align-items: center;
         }
-        .shopping-item:last-child { border-bottom: none; }
+        .menu-row:last-child { border-bottom: none; }
+        .menu-row.past-day { opacity: 0.4; filter: grayscale(1); pointer-events: none; }
 
-        .shopping-item-text {
-            flex: 1;
-            font-size: 0.95rem;
-        }
+        .day-name { font-family: var(--font-display); font-size: 1rem; font-weight: 700; color: var(--color-primary); }
+        .day-date { font-size: 0.7rem; color: var(--color-muted); }
 
-        .checked-item {
-            color: var(--color-muted);
-            text-decoration: line-through;
-            opacity: 0.5;
-        }
+        .meal-line { font-size: 0.85rem; margin-bottom: 0.2rem; color: var(--text-main); }
+        .meal-line strong { font-size: 0.7rem; color: var(--color-muted); text-transform: uppercase; width: 20px; display: inline-block; }
+        .dinner-title { font-weight: 600; color: var(--color-primary); }
+        .dinner-link { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--color-divider); }
 
-        .custom-checkbox {
-            width: 20px;
-            height: 20px;
-            accent-color: var(--color-primary);
-            cursor: pointer;
+        .action-col { display: flex; justify-content: flex-end; }
+        .select-recipe { padding: 0.4rem; font-size: 0.8rem; border: 1px solid var(--color-border); border-radius: 2px; background: #F8F6F2; width: 100%; }
+
+        /* --- SHOPPING LIST GRID --- */
+        .shopping-list-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+            align-items: start;
         }
+        .category-group { background: #FAF9F6; padding: 1.25rem; border-radius: var(--border-radius); border: 1px solid var(--color-border); }
+        .category-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--color-accent); margin-bottom: 0.75rem; border-bottom: 1px solid var(--color-divider); padding-bottom: 0.25rem; }
+        .shopping-item { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.3rem 0; }
+        .item-checkbox { width: 16px; height: 18px; accent-color: var(--color-primary); cursor: pointer; }
+        .item-text { font-size: 0.85rem; line-height: 1.4; flex: 1; }
+        .item-text.checked { text-decoration: line-through; opacity: 0.5; }
+        .badge-organic { font-size: 8px; font-weight: 800; background: #EEF3F1; color: var(--color-success); padding: 1px 4px; border-radius: 2px; text-transform: uppercase; margin-left: 4px; }
 
         /* --- NUTRITION --- */
-        .nutrition-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 1rem;
-            text-align: center;
-        }
+        .nutrition-strip { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .nut-stat { background: #FAF9F6; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: 2px; flex: 1; min-width: 100px; }
+        .nut-stat .label { display: block; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; color: var(--color-muted); margin-bottom: 2px; }
+        .nut-stat .val { font-size: 0.9rem; font-weight: 600; color: var(--color-primary); }
 
-        .nut-badge {
-            background: #FAF9F6;
-            padding: 1.25rem;
-            border: 1px solid #EFECE6;
-            border-radius: 4px;
-        }
+        /* --- BUTTONS --- */
+        .btn { font-family: var(--font-body); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; font-size: 0.7rem; padding: 0.5rem 1rem; border-radius: 2px; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--color-primary); color: white; }
+        .btn-secondary { background: #FAF9F6; color: var(--text-muted); border: 1px solid var(--color-border); }
+        .btn-danger { background: transparent; color: var(--color-danger); border: 1px solid var(--color-danger); }
 
-        .nut-label {
-            display: block;
-            font-size: 0.75rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            color: var(--color-primary);
-            letter-spacing: 1px;
-            margin-bottom: 0.5rem;
-        }
+        /* --- CHAT --- */
+        .chat-trigger { position: fixed; bottom: 1.5rem; right: 1.5rem; width: 52px; height: 56px; border-radius: 50%; background: var(--color-primary); color: white; border: none; cursor: pointer; box-shadow: var(--shadow-md); display: flex; align-items: center; justify-content: center; z-index: 900; }
+        .chat-window { position: fixed; bottom: 5.5rem; right: 1.5rem; width: 420px; height: 580px; background: white; border: 1px solid var(--color-border); border-radius: 8px; box-shadow: var(--shadow-md); display: flex; flex-direction: column; overflow: hidden; opacity: 0; transform: translateY(10px); pointer-events: none; transition: all 0.2s; z-index: 950; }
+        .chat-window.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
+        .chat-header { padding: 1rem; background: var(--color-primary); color: white; display: flex; justify-content: space-between; align-items: center; }
+        .chat-msg { padding: 0.75rem 1rem; border-radius: 4px; font-size: 0.9rem; line-height: 1.5; max-width: 85%; }
+        .chat-msg.user { align-self: flex-end; background: var(--color-divider); color: var(--text-main); }
+        .chat-msg.bot { align-self: flex-start; background: white; border: 1px solid var(--color-border); }
 
-        .nut-val {
-            font-size: 1.1rem;
-            font-weight: 500;
-        }
-
-        .nut-pct {
-            font-size: 0.9rem;
-            font-weight: 700;
-            margin-left: 0.25rem;
-        }
-
-        /* --- UTILITIES --- */
-        .past-day {
-            opacity: 0.4;
-            filter: grayscale(1);
-            pointer-events: none;
-        }
-
-        .ornament {
-            color: var(--color-divider);
-            margin: 1.5rem 0;
-            font-size: 1.2rem;
-            text-align: center;
-        }
-
-        /* --- MODALS --- */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(11, 15, 25, 0.4);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            z-index: 2000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            animation: fadeIn 0.3s ease;
-        }
-
-        .modal-content {
-            background: white;
-            border-radius: 4px;
-            padding: 3rem;
-            max-width: 700px;
-            width: 90%;
-            position: relative;
-            box-shadow: var(--shadow-bold);
-            border: 1px solid var(--color-border);
-            animation: scaleUp 0.3s ease;
-        }
-
-        .close-btn {
-            position: absolute;
-            top: 1.5rem;
-            right: 1.5rem;
-            font-size: 2rem;
-            color: var(--color-muted);
-            cursor: pointer;
-            line-height: 1;
-            transition: color 0.2s;
-        }
-        .close-btn:hover { color: var(--text-main); }
-
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-
-        /* --- CHAT WIDGET --- */
-        .chat-widget-container { position: fixed; bottom: 2rem; right: 2rem; z-index: 1000; }
-        .chat-trigger-btn {
-            width: 60px; height: 60px; border-radius: 50%;
-            background: var(--color-primary); border: none; color: #fff;
-            cursor: pointer; box-shadow: var(--shadow-bold);
-            display: flex; align-items: center; justify-content: center;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        .chat-box-panel {
-            position: fixed; bottom: 7rem; right: 2rem; width: 420px; height: 600px;
-            background: white; border: 1px solid var(--color-border); border-radius: 8px;
-            box-shadow: var(--shadow-bold); display: flex; flex-direction: column;
-            overflow: hidden; opacity: 0; transform: translateY(20px); pointer-events: none;
-            transition: all 0.3s ease;
-            z-index: 1000;
-        }
-        .chat-box-panel.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
-        
-        .chat-header {
-            padding: 1.5rem; background: var(--color-primary); color: white; 
-            display: flex; justify-content: space-between; align-items: center;
-        }
-
-        .chat-header-actions {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .chat-action-btn {
-            background: transparent;
-            border: none;
-            color: white;
-            cursor: pointer;
-            opacity: 0.8;
-            transition: opacity 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .chat-action-btn:hover { opacity: 1; }
-
-        .chat-message {
-            padding: 1rem 1.25rem;
-            border-radius: 4px;
-            font-size: 0.95rem;
-            max-width: 85%;
-            line-height: 1.6;
-        }
-        .chat-message.user {
-            align-self: flex-end;
-            background: var(--color-border);
-            color: var(--text-main);
-        }
-        .chat-message.assistant {
-            align-self: flex-start;
-            background: white;
-            border: 1px solid var(--color-border);
-            color: var(--text-main);
-        }
-        
-        /* --- MOBILE ADAPTATIONS & HAMBURGER --- */
-        .hamburger-btn {
-            display: flex;
-            background: transparent;
-            border: 1px solid var(--color-divider);
-            color: var(--color-primary);
-            font-size: 1.5rem;
-            width: 44px;
-            height: 44px;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            cursor: pointer;
-            position: absolute;
-            top: 0;
-            right: 0;
-            z-index: 1010;
-            transition: all 0.2s;
-        }
-        
-        .hamburger-btn:hover {
-            background: #FAF9F6;
-            border-color: var(--color-primary);
-        }
-
-        .side-drawer {
-            position: fixed;
-            top: 0;
-            right: -100%;
-            width: 85%;
-            max-width: 320px;
-            height: 100%;
-            background: white;
-            z-index: 1005;
-            padding: 2rem 1.5rem 4rem 1.5rem;
-            box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
-            border-left: 1px solid var(--color-border);
-            transition: right 0.4s ease;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .side-drawer.active { right: 0; }
-
-        .drawer-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.3);
-            backdrop-filter: blur(4px);
-            z-index: 1000;
-        }
+        /* --- MOBILE --- */
+        .mobile-header { display: none; position: fixed; top: 0; left: 0; right: 0; height: 56px; background: white; border-bottom: 1px solid var(--color-border); padding: 0 1.25rem; align-items: center; justify-content: space-between; z-index: 1000; }
+        .drawer-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); backdrop-filter: blur(4px); z-index: 1100; }
         .drawer-overlay.active { display: block; }
-
-        .drawer-close {
-            position: absolute;
-            top: 1.5rem;
-            right: 1.5rem;
-            font-size: 2rem;
-            color: var(--color-muted);
-            cursor: pointer;
+        @media (max-width: 1024px) {
+            .sidebar { position: fixed; left: -100%; height: 100vh; transition: left 0.3s; z-index: 1200; }
+            .sidebar.active { left: 0; }
+            .main-container { padding: 4.5rem 1rem 2rem 1rem; }
+            .mobile-header { display: flex; }
+            .menu-row { grid-template-columns: 1fr; gap: 0.5rem; }
+            .action-col { justify-content: flex-start; }
+            .chat-window { width: calc(100vw - 2rem); right: 1rem; height: 60vh; }
         }
 
-        .tabs-container {
-            display: none; /* Hamburger is the primary nav now */
-        }
-
-        @media (max-width: 768px) {
-            .calendar-day-card { grid-template-columns: 1fr; gap: 1rem; }
-            .card { padding: 1.5rem; }
-            header { padding-right: 50px; text-align: left; }
-            header h1 { font-size: 2rem; }
-            .ornament { text-align: left; }
-        }
-
-        /* Loading Overlay */
-        .loading-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(244, 240, 235, 0.95); z-index: 9999;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .loading-spinner-container { text-align: center; padding: 2rem; }
-        .loading-spinner {
-            width: 40px; height: 40px; border: 3px solid #E6DFD5;
-            border-top: 3px solid var(--color-primary); border-radius: 50%;
-            margin: 0 auto 1.5rem auto; animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(244, 240, 235, 0.98); z-index: 9999; display: flex; align-items: center; justify-content: center; text-align: center; }
+        .spinner { width: 30px; height: 30px; border: 3px solid #E6DFD5; border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <!-- MOBILE NAVIGATION -->
-    <button class="hamburger-btn" id="hamburger-btn" onclick="toggleDrawer()">☰</button>
-    <div class="drawer-overlay" id="drawer-overlay" onclick="toggleDrawer()"></div>
-    <div class="side-drawer" id="side-drawer">
-        <span class="drawer-close" onclick="toggleDrawer()">&times;</span>
-        <div class="card-header" style="text-align: left; margin-bottom: 1.5rem;">
-            <span class="card-subtitle">Navigation</span>
-            <h2 class="card-title">Sections</h2>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 1rem;">
-            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('menu'); toggleDrawer()">📅 Weekly Menu</button>
-            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('shopping'); toggleDrawer()">🛒 Shopping List</button>
-            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="switchTab('prep'); toggleDrawer()">👨‍🍳 Prep Guide</button>
-            
-            <div style="margin: 1.5rem 0 0.5rem 0; border-top: 1px double var(--color-divider); padding-top: 1.5rem;">
-                <span class="card-subtitle">Actions</span>
-            </div>
-            
-            <button class="btn btn-secondary" style="text-align: left; padding: 1rem;" onclick="openStaplesModal(); toggleDrawer()">📋 Manage Staples</button>
-            
-            <form action="{{ url_for('sync') }}" method="POST">
-                <button type="submit" class="btn btn-secondary" style="text-align: left; padding: 1rem; width: 100%;">🔄 Refresh List</button>
-            </form>
-            
-            <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('Permanently clear current menu and shopping list?')">
-                <button type="submit" class="btn btn-danger" style="text-align: left; padding: 1rem; width: 100%;">🗑️ Clear Week</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- LOADING OVERLAY -->
     <div id="loading-overlay" class="loading-overlay" style="display: none;">
-        <div class="loading-spinner-container">
-            <div class="loading-spinner"></div>
-            <div id="loading-text" class="card-subtitle" style="margin-bottom: 1rem;">Preparing Your Menu</div>
-            <div id="progress-bar-container" style="background: #E6DFD5; height: 2px; width: 200px; margin: 0 auto 1.5rem auto;">
-                <div id="progress-bar-fill" style="background: var(--color-primary); height: 100%; width: 0%; transition: width 0.4s;"></div>
-            </div>
-            <div id="loading-log" style="font-family: monospace; font-size: 10px; color: var(--color-muted); max-width: 300px; margin: 0 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;"></div>
-        </div>
+        <div><div class="spinner"></div><div class="brand-label">Kitchen Process</div><div id="loading-text" class="brand-title" style="font-size: 1.2rem;">Orchestrating Menu</div><div id="loading-log" style="font-size: 10px; color: var(--color-muted); margin-top: 1rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div></div>
     </div>
+    <div id="drawer-overlay" class="drawer-overlay" onclick="toggleDrawer()"></div>
 
-    <div class="container">
-        <header>
-            <span class="brand-label">Culinary Companion</span>
-            <h1>The Crosty Kitchen</h1>
-            <p>Private Menu & Planning Dashboard</p>
-            <div class="ornament">❖ ❖ ❖</div>
-        </header>
+    <aside id="sidebar" class="sidebar">
+        <div class="sidebar-brand"><span class="brand-label">Culinary Companion</span><div class="brand-title">Crosty Kitchen</div></div>
+        <nav class="nav-group">
+            <button class="nav-item active" id="nav-menu" onclick="switchTab('menu')">📅 Weekly Menu</button>
+            <button class="nav-item" id="nav-shopping" onclick="switchTab('shopping')">🛒 Shopping List</button>
+            <button class="nav-item" id="nav-prep" onclick="switchTab('prep')">👨‍🍳 Prep Guide</button>
+            <div style="margin-top: 1.5rem; margin-bottom: 0.5rem;"><span class="brand-label">Management</span></div>
+            <button class="nav-item" onclick="openStaplesModal()">📋 Manage Staples</button>
+            <form action="{{ url_for('sync') }}" method="POST"><button type="submit" class="nav-item">🔄 Refresh List</button></form>
+            <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('Permanently clear week?')">
+                <button type="submit" class="nav-item" style="color: var(--color-danger);">🗑️ Clear Week</button>
+            </form>
+        </nav>
+        <div class="sidebar-footer"><div class="brand-label">Active Week</div><div style="font-size: 0.75rem; color: var(--color-muted); font-weight: 500;">{{ start_date }} &rarr; {{ end_date }}</div></div>
+    </aside>
 
+    <header class="mobile-header"><div class="brand-title" style="font-size: 1.1rem;">Crosty Kitchen</div><button class="hamburger-btn" onclick="toggleDrawer()">☰</button></header>
+
+    <main class="main-container">
         {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="card" style="padding: 1.5rem; text-align: center; margin-bottom: 2rem; border-color: var(--color-{{ 'success' if category == 'success' else 'danger' }});">
-                  <span style="font-weight: 600; color: var(--color-{{ 'success' if category == 'success' else 'danger' }});">{{ message }}</span>
-              </div>
-            {% endfor %}
-          {% endif %}
+          {% if messages %}{% for category, message in messages %}
+            <div class="card" style="padding: 0.75rem 1rem; border-color: var(--color-{{ 'success' if category == 'success' else 'danger' }}); margin-bottom: 0.5rem;">
+                <span style="font-weight: 600; font-size: 0.85rem; color: var(--color-{{ 'success' if category == 'success' else 'danger' }});">{{ message }}</span>
+            </div>
+          {% endfor %}{% endif %}
         {% endwith %}
 
         {% if not is_submitted %}
-        <!-- STATE A: QUESTIONNAIRE FORM -->
-        <div class="card" style="max-width: 800px; margin: 0 auto;">
-            <div class="card-header">
-                <span class="card-subtitle">Consultation</span>
-                <h2 class="card-title">Weekly Preferences</h2>
-                <p style="font-size: 0.9rem; color: var(--color-muted);">{{ start_date }} to {{ end_date }}</p>
-            </div>
-            
+        <div class="card" style="max-width: 600px; margin: auto;">
+            <div class="card-header"><h2 class="card-title">Plan New Week</h2></div>
             <form id="plan-form" onsubmit="submitPlanForm(event)">
-                <div style="margin-bottom: 2.5rem;">
-                    <label class="brand-label" style="text-align: left; margin-bottom: 1rem;">Meal Exclusions</label>
-                    <textarea class="textarea-input" id="exclude_text" name="exclude_text" placeholder="e.g. Skip dinner on Monday..."></textarea>
-                </div>
-                <div style="margin-bottom: 2.5rem;">
-                    <label class="brand-label" style="text-align: left; margin-bottom: 1rem;">Inventory to Utilize</label>
-                    <textarea class="textarea-input" id="freezer_items" name="freezer_items" placeholder="e.g. salmon, frozen peas..."></textarea>
-                </div>
-                <div style="margin-bottom: 2.5rem;">
-                    <label class="brand-label" style="text-align: left; margin-bottom: 1rem;">Special Requests</label>
-                    <textarea class="textarea-input" id="special_requests" name="special_requests" placeholder="e.g. High fiber priority..."></textarea>
-                </div>
-                <div style="text-align: center; margin-top: 3rem;">
-                    <button type="submit" class="btn btn-primary" style="padding: 1rem 3rem;">Generate Plan</button>
-                </div>
+                <div style="margin-bottom: 1.25rem;"><label class="brand-label">Exclusions</label><textarea class="textarea-input" name="exclude_text" placeholder="Skip meals..."></textarea></div>
+                <div style="margin-bottom: 1.25rem;"><label class="brand-label">Inventory</label><textarea class="textarea-input" name="freezer_items" placeholder="Salmon, frozen peas..."></textarea></div>
+                <div style="margin-bottom: 1.25rem;"><label class="brand-label">Requests</label><textarea class="textarea-input" name="special_requests" placeholder="Mexican, high fiber..."></textarea></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 0.8rem;">Generate Weekly Plan</button>
             </form>
         </div>
         {% else %}
-        
-        <!-- ACTIVE DASHBOARD -->
-        <div class="tabs-container">
-            <button type="button" id="btn-menu" class="tab-btn active" onclick="switchTab('menu')">Weekly Menu</button>
-            <button type="button" id="btn-shopping" class="tab-btn" onclick="switchTab('shopping')">Shopping List</button>
-            <button type="button" id="btn-prep" class="tab-btn" onclick="switchTab('prep')">Prep Guide</button>
-        </div>
 
-        <div id="tab-menu" class="tab-content">
+        <div id="tab-menu" class="tab-view">
             <div class="card">
-                <div class="card-header">
-                    <span class="card-subtitle">Current Selection</span>
-                    <h2 class="card-title">Weekly Menu</h2>
-                </div>
-                <div class="calendar-list">
+                <div class="card-header"><h2 class="card-title">Weekly Menu</h2><span class="brand-label">Chef's Table</span></div>
+                <div class="menu-table">
                     {% for d_str in planning_dates %}
                         {% set day = d_str | select_day_name %}
                         {% set meals = {'breakfast': 'Skipped', 'lunch': 'Skipped', 'dinner': 'Skipped'} %}
                         {% set dinner_entry = [] %}
-                        {% for item in meal_plans %}
-                            {% if item.date[:10] == d_str %}
-                                {% if item.entryType == 'breakfast' %} {% set _ = meals.update({'breakfast': item.title or 'Planned Breakfast'}) %}
-                                {% elif item.entryType == 'lunch' %} {% set _ = meals.update({'lunch': item.title or 'Planned Lunch'}) %}
-                                {% elif item.entryType == 'dinner' %}
-                                    {% set _ = dinner_entry.append(item) %}
-                                    {% if item.recipeId %} 
-                                        {% if item.recipe and item.recipe.name %}
-                                            {% set _ = meals.update({'dinner': item.recipe.name}) %}
-                                        {% else %}
-                                            {% set _ = meals.update({'dinner': 'Recipe Details Unavailable'}) %}
-                                        {% endif %}
-                                    {% elif item.title %} {% set _ = meals.update({'dinner': item.title}) %}
-                                    {% endif %}
+                        {% for item in meal_plans %}{% if item.date[:10] == d_str %}
+                            {% if item.entryType == 'breakfast' %} {% set _ = meals.update({'breakfast': item.title or 'Staples'}) %}
+                            {% elif item.entryType == 'lunch' %} {% set _ = meals.update({'lunch': item.title or 'Leftovers'}) %}
+                            {% elif item.entryType == 'dinner' %}
+                                {% set _ = dinner_entry.append(item) %}
+                                {% if item.recipeId %} {% set _ = meals.update({'dinner': item.recipe.name if item.recipe else 'Recipe Missing'}) %}
+                                {% elif item.title %} {% set _ = meals.update({'dinner': item.title}) %}
                                 {% endif %}
                             {% endif %}
-                        {% endfor %}
-                        <div class="calendar-day-card {% if d_str < today_str %}past-day{% endif %}">
-                            <div class="day-info">
-                                <div class="day-name">{{ day }}</div>
-                                <div class="day-date">{{ d_str }}</div>
-                            </div>
-                            <div class="meal-info">
-                                <div class="meal-desc"><strong>B:</strong> {{ meals.breakfast }}</div>
-                                <div class="meal-desc"><strong>L:</strong> {{ meals.lunch }}</div>
-                                <div class="dinner-title"><strong>D:</strong> 
+                        {% endif %}{% endfor %}
+                        <div class="menu-row {% if d_str < today_str %}past-day{% endif %}">
+                            <div class="day-col"><div class="day-name">{{ day }}</div><div class="day-date">{{ d_str }}</div></div>
+                            <div class="meal-col">
+                                <div class="meal-line"><strong>B</strong> {{ meals.breakfast }}</div>
+                                <div class="meal-line"><strong>L</strong> {{ meals.lunch }}</div>
+                                <div class="meal-line dinner-title"><strong>D</strong> 
                                     {% if dinner_entry and dinner_entry[0].recipeId %}
-                                        {% if d_str < today_str %}
-                                            {{ meals.dinner }}
-                                        {% else %}
-                                            <a href="{{ mealie_url }}/g/home/r/{{ dinner_entry[0].recipe.slug }}" class="dinner-link">{{ meals.dinner }}</a>
-                                        {% endif %}
-                                        {% if dinner_entry[0].is_blackstone %}<span class="griddle-badge">🍳 Griddle</span>{% endif %}
+                                        <a href="{{ mealie_url }}/g/home/r/{{ dinner_entry[0].recipe.slug }}" class="dinner-link" target="_blank">{{ meals.dinner }}</a>
+                                        {% if dinner_entry[0].is_blackstone %}<span class="badge-organic" style="background:#FCEEE9; color:var(--color-accent);">Griddle</span>{% endif %}
                                     {% else %}{{ meals.dinner }}{% endif %}
                                 </div>
                             </div>
-                            <div class="meal-action">
-                                {% if d_str >= today_str %}
+                            <div class="action-col">{% if d_str >= today_str %}
                                 <form action="{{ url_for('change_meal') }}" method="POST">
                                     <input type="hidden" name="date" value="{{ d_str }}">
                                     <input type="hidden" name="entry_id" value="{{ dinner_entry[0].id if dinner_entry else '' }}">
                                     <select name="recipe_id" class="select-recipe" onchange="this.form.submit()">
-                                        <option value="">Edit Dinner</option>
-                                        <option value="SKIP">🚫 Eating Out</option>
+                                        <option value="">Edit Dinner</option><option value="SKIP">🚫 Eating Out</option>
                                         {% for rec in all_recipes %}<option value="{{ rec.id }}">{{ rec.name }}</option>{% endfor %}
                                     </select>
                                 </form>
-                                {% endif %}
-                            </div>
+                            {% endif %}</div>
                         </div>
                     {% endfor %}
                 </div>
             </div>
-
-            <div class="card">
-                <div class="card-header"><span class="card-subtitle">Analysis</span><h2 class="card-title">Nutritional Baseline</h2></div>
-                <div class="nutrition-grid">
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-header"><h2 class="card-title" style="font-size: 1.1rem;">Averages</h2></div>
+                <div class="nutrition-strip">
                     {% for k, rda_val in rda.items() %}
                         {% set avg_val = averages.get(k, 0.0) %}
                         {% set pct = ((avg_val / rda_val) * 100) | round | int if rda_val > 0 else 0 %}
-                        <div class="nut-badge">
-                            <span class="nut-label">{{ k }}</span>
-                            <span class="nut-val">{{ avg_val }}{{ 'kcal' if k == 'calories' else ('mg' if k in ['sodium', 'cholesterol'] else 'g') }}</span>
-                            <span class="nut-pct" style="color: {{ 'var(--color-danger)' if k == 'sodium' and pct > 100 else ('var(--color-accent)' if k == 'fiber' and pct < 100 else 'var(--text-main)') }};">{{ pct }}%</span>
+                        <div class="nut-stat">
+                            <span class="label">{{ k }}</span>
+                            <span class="val">{{ avg_val }}{{ 'kcal' if k == 'calories' else ('mg' if k in ['sodium', 'cholesterol'] else 'g') }}</span>
+                            <span style="font-size: 0.7rem; font-weight: 700; margin-left: 4px; color: {{ 'var(--color-danger)' if k == 'sodium' and pct > 100 else ('var(--color-accent)' if k == 'fiber' and pct < 100 else 'var(--color-primary)') }};">{{ pct }}%</span>
                         </div>
                     {% endfor %}
                 </div>
             </div>
         </div>
 
-        <div id="tab-shopping" class="tab-content" style="display: none;">
+        <div id="tab-shopping" class="tab-view" style="display: none;">
             <div class="card">
-                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom-style: solid;">
-                    <div style="text-align: left;"><span class="card-subtitle">Provisions</span><h2 class="card-title">Shopping List</h2></div>
-                    <button type="button" class="btn btn-secondary" style="padding: 0.6rem 1rem;" onclick="copyShoppingList(this)">Copy List</button>
+                <div class="card-header"><h2 class="card-title">Shopping List</h2><button class="btn btn-secondary" onclick="copyShoppingList(this)">Copy List</button></div>
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+                    <input type="text" id="quick-add-input" class="textarea-input" style="padding: 0.6rem;" placeholder="Add item..." onkeypress="if(event.key === 'Enter') quickAddShoppingItem()">
+                    <button class="btn btn-primary" onclick="quickAddShoppingItem()">Add</button>
                 </div>
-                <div style="display: flex; gap: 0.5rem; margin-bottom: 2rem; background: #FAF9F6; padding: 1rem; border-radius: 4px;">
-                    <input type="text" id="quick-add-input" class="textarea-input" style="min-height: auto; padding: 0.75rem;" placeholder="Add an item..." onkeypress="if(event.key === 'Enter') quickAddShoppingItem()">
-                    <button type="button" class="btn btn-primary" onclick="quickAddShoppingItem()">Add</button>
-                </div>
-                <div class="shopping-list-container">
+                <div class="shopping-list-grid">
                     {% set last_label = [None] %}
                     {% for item in shopping_list %}
-                        {% if item.label and item.label.name != last_label[0] %}
-                            <div class="brand-label" style="text-align: left; padding: 1.5rem 0 0.5rem 0; border-bottom: 1px solid var(--color-border); margin-bottom: 0.5rem; color: var(--color-primary);">{{ item.label.name }}</div>
-                            {% if last_label.append(item.label.name) %}{% endif %}
-                        {% elif not item.label and last_label[0] != 'Uncategorized' %}
-                            <div class="brand-label" style="text-align: left; padding: 1.5rem 0 0.5rem 0; border-bottom: 1px solid var(--color-border); margin-bottom: 0.5rem; color: var(--color-muted);">General Items</div>
-                            {% if last_label.append('Uncategorized') %}{% endif %}
+                        {% if (item.label and item.label.name != last_label[0]) or (not item.label and last_label[0] != 'Uncategorized') %}
+                            {% if not loop.first %}</div></div>{% endif %}
+                            <div class="category-group">
+                            <div class="category-title">{{ item.label.name if item.label else 'General Items' }}</div>
+                            <div class="category-items">
+                            {% set _ = last_label.clear() or last_label.append(item.label.name if item.label else 'Uncategorized') %}
                         {% endif %}
                         <div class="shopping-item">
-                            <input type="checkbox" class="custom-checkbox shopping-list-checkbox" data-id="{{ item.id }}" {% if item.checked %}checked{% endif %}>
-                            <div class="shopping-item-text {% if item.checked %}checked-item{% endif %}">{{ item.note }}{% if '(Buy Organic)' in item.note %}<span class="griddle-badge" style="color: var(--color-success); border-color: #DDE8E4; background: #EEF3F1;">Organic</span>{% endif %}</div>
+                            <input type="checkbox" class="item-checkbox shopping-list-checkbox" data-id="{{ item.id }}" {% if item.checked %}checked{% endif %}>
+                            <div class="item-text {% if item.checked %}checked{% endif %}">{{ item.note }}{% if '(Buy Organic)' in item.note %}<span class="badge-organic">Organic</span>{% endif %}</div>
                         </div>
+                        {% if loop.last %}</div></div>{% endif %}
                     {% endfor %}
                 </div>
             </div>
         </div>
 
-        <div id="tab-prep" class="tab-content" style="display: none;">
+        <div id="tab-prep" class="tab-view" style="display: none;">
             <div class="card">
-                <div class="card-header"><span class="card-subtitle">Instructional</span><h2 class="card-title">Prep Guide</h2></div>
-                {% set ns = namespace(prep_found=false) %}
+                <div class="card-header"><h2 class="card-title">Prep Guide</h2></div>
                 {% for d_str in planning_dates %}
-                    {% set day_prep_entries = [] %}
-                    {% for item in meal_plans %}{% if item.date[:10] == d_str and item.text %}{% set _ = day_prep_entries.append(item) %}{% endif %}{% endfor %}
-                    {% if day_prep_entries %}
-                        {% set ns.prep_found = true %}
-                        <div style="margin-bottom: 2.5rem;" class="{% if d_str < today_str %}past-day{% endif %}">
-                            <div class="brand-label" style="text-align: left; padding-bottom: 0.5rem; border-bottom: 1px solid var(--color-divider); margin-bottom: 1rem;">{{ d_str | select_day_name }} &bull; {{ d_str }}</div>
-                            {% for entry in day_prep_entries %}
-                                <div style="padding: 1.5rem; background: #FAF9F6; border-radius: 4px; border-left: 3px solid var(--color-accent); margin-bottom: 1rem;">
-                                    <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem;">{{ entry.title or (entry.recipe.name if entry.recipeId else 'Prep Note') }}</div>
-                                    <div style="font-size: 1rem; color: var(--text-main); line-height: 1.7;">{{ entry.text }}</div>
+                    {% set day_prep = [] %}
+                    {% for item in meal_plans %}{% if item.date[:10] == d_str and item.text %}{% set _ = day_prep.append(item) %}{% endif %}{% endfor %}
+                    {% if day_prep %}
+                        <div style="margin-bottom: 1.5rem;" class="{% if d_str < today_str %}past-day{% endif %}">
+                            <div class="category-title" style="color: var(--color-primary);">{{ d_str | select_day_name }} &bull; {{ d_str }}</div>
+                            {% for entry in day_prep %}
+                                <div style="padding: 1rem; background: #FAF9F6; border-left: 3px solid var(--color-accent); margin-bottom: 0.5rem;">
+                                    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--color-muted); margin-bottom: 2px;">{{ entry.title or 'Note' }}</div>
+                                    <div style="font-size: 0.9rem; line-height: 1.5;">{{ entry.text }}</div>
                                 </div>
                             {% endfor %}
                         </div>
@@ -810,204 +392,133 @@
                 {% endfor %}
             </div>
         </div>
-
         {% endif %}
-    </div>
+    </main>
 
-    <!-- STAPLES MODAL -->
-    <div id="staples-modal" class="modal" style="display: none;">
-        <div class="modal-content" style="background: white; border-radius: 4px; padding: 3rem; max-width: 700px;">
-            <span class="close-btn" onclick="closeStaplesModal()">&times;</span>
-            <div class="card-header" style="text-align: left;"><span class="card-subtitle">Inventory</span><h2 class="card-title">Household Staples</h2></div>
-            <form id="staples-form" action="{{ url_for('sync') }}" method="POST">
+    <div id="staples-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 2000; align-items: center; justify-content: center;">
+        <div class="card" style="width: 90%; max-width: 650px; position: relative;">
+            <button onclick="closeStaplesModal()" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            <div class="card-header"><h2 class="card-title">Manage Staples</h2></div>
+            <form action="{{ url_for('sync') }}" method="POST">
                 <input type="hidden" name="staples_submitted" value="1">
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; max-height: 400px; overflow-y: auto; padding: 1rem; background: #FAF9F6; border: 1px solid var(--color-border); margin-bottom: 2rem;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; max-height: 350px; overflow-y: auto; background: #FAF9F6; padding: 1rem; margin-bottom: 1.25rem; border: 1px solid var(--color-border);">
                     {% for item in staples %}
-                        <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; cursor: pointer;">
-                            <input type="checkbox" name="low_staples" value="{{ item.id }}" class="custom-checkbox" {% if item.id in low_staples or item.id.replace('-', '') in low_staples %}checked{% endif %}>
-                            <span style="font-size: 0.9rem;">{{ item.note }}</span>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; cursor: pointer;">
+                            <input type="checkbox" name="low_staples" value="{{ item.id }}" class="item-checkbox" {% if item.id in low_staples or item.id.replace('-', '') in low_staples %}checked{% endif %}>
+                            {{ item.note }}
                         </label>
                     {% endfor %}
                 </div>
-                <div style="text-align: right;"><button type="submit" class="btn btn-primary">Update Provisions</button></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Update List</button>
             </form>
         </div>
     </div>
 
-    <!-- CHAT WIDGET -->
-    <div class="chat-widget-container">
-        <div id="chat-panel" class="chat-box-panel">
-            <div class="chat-header">
-                <div>
-                    <div style="font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; line-height: 1.2;">Kitchen Assistant</div>
-                    <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8; margin-top: 0.2rem;">Expert Culinary Guidance</div>
-                </div>
-                <div class="chat-header-actions">
-                    <button id="chat-clear" class="chat-action-btn" title="Clear History">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                        </svg>
-                    </button>
-                    <button id="chat-close" class="chat-action-btn" style="font-size: 1.8rem; line-height: 1;">&times;</button>
-                </div>
-            </div>
-            <div id="chat-messages" style="flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: #FAF9F6;"></div>
-            <div style="padding: 1.25rem; border-top: 1px solid var(--color-border); display: flex; gap: 0.75rem; background: white;">
-                <input type="text" id="chat-input" class="textarea-input" style="min-height: auto; padding: 0.85rem; font-size: 0.9rem;" placeholder="Ask your chef...">
-                <button id="chat-send" class="btn btn-primary" style="padding: 0.5rem 1.25rem;" disabled>Send</button>
+    <div id="chat-window" class="chat-window">
+        <div class="chat-header">
+            <div style="font-weight: 700; font-size: 1.1rem;">Kitchen Assistant</div>
+            <div style="display: flex; gap: 0.75rem; align-items: center;">
+                <button id="chat-clear" style="background: none; border: none; color: white; cursor: pointer;" title="Clear History">🗑️</button>
+                <button onclick="toggleChat()" style="background: none; border: none; color: white; font-size: 1.4rem; cursor: pointer;">&times;</button>
             </div>
         </div>
-        <button id="chat-trigger" class="chat-trigger-btn">
-            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
-            </svg>
-        </button>
+        <div id="chat-messages" style="flex: 1; overflow-y: auto; padding: 1.25rem; background: #FAF9F6; display: flex; flex-direction: column; gap: 1rem;"></div>
+        <div style="padding: 1rem; border-top: 1px solid var(--color-border); display: flex; gap: 0.5rem; background: white;">
+            <input type="text" id="chat-input" class="textarea-input" style="padding: 0.75rem; font-size: 0.9rem;" placeholder="Ask your chef...">
+            <button id="chat-send" class="btn btn-primary" disabled>Send</button>
+        </div>
     </div>
+    <button class="chat-trigger" onclick="toggleChat()">💬</button>
 
     <script>
-        function toggleDrawer() {
-            document.getElementById('side-drawer').classList.toggle('active');
-            document.getElementById('drawer-overlay').classList.toggle('active');
+        function toggleDrawer() { document.getElementById('sidebar').classList.toggle('active'); document.getElementById('drawer-overlay').classList.toggle('active'); }
+        function toggleChat() { document.getElementById('chat-window').classList.toggle('open'); }
+        function switchTab(id) {
+            document.querySelectorAll('.tab-view').forEach(v => v.style.display = 'none');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            const view = document.getElementById('tab-' + id);
+            if (view) view.style.display = 'block';
+            const nav = document.getElementById('nav-' + id);
+            if (nav) nav.classList.add('active');
+            localStorage.setItem('activeTab', id);
+            if (window.innerWidth <= 1024) toggleDrawer();
         }
-
-        function copyShoppingList(btn) {
-            const items = document.querySelectorAll('.shopping-item');
-            const lines = [];
-            items.forEach(item => {
-                const checkbox = item.querySelector('.shopping-list-checkbox');
-                if (checkbox && !checkbox.checked) {
-                    const textSpan = item.querySelector('.shopping-item-text');
-                    if (textSpan) lines.push(`- ${textSpan.innerText.trim()}`);
-                }
-            });
-            if (lines.length === 0) { alert("No items to copy."); return; }
-            navigator.clipboard.writeText(lines.join('\n')).then(() => {
-                const original = btn.innerText;
-                btn.innerText = "Copied!";
-                btn.style.background = "var(--color-accent)";
-                setTimeout(() => { btn.innerText = original; btn.style.background = ""; }, 2000);
-            });
-        }
-
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            const tab = document.getElementById('tab-' + tabId);
-            if (tab) tab.style.display = 'block';
-            const btn = document.getElementById('btn-' + tabId);
-            if (btn) btn.classList.add('active');
-            localStorage.setItem('activeTab', tabId);
-        }
-
         function openStaplesModal() { document.getElementById('staples-modal').style.display = 'flex'; }
         function closeStaplesModal() { document.getElementById('staples-modal').style.display = 'none'; }
+        
+        function copyShoppingList(btn) {
+            const lines = [];
+            document.querySelectorAll('.shopping-item').forEach(item => {
+                const cb = item.querySelector('.item-checkbox');
+                if (cb && !cb.checked) lines.push('- ' + item.querySelector('.item-text').innerText.trim());
+            });
+            if (!lines.length) return alert("No items.");
+            navigator.clipboard.writeText(lines.join('\n')).then(() => {
+                const old = btn.innerText; btn.innerText = "Copied!"; setTimeout(() => btn.innerText = old, 2000);
+            });
+        }
 
-        function showLoading(msg, submsg='') {
+        async function quickAddShoppingItem() {
+            const val = document.getElementById('quick-add-input').value.trim();
+            if (!val) return;
+            const res = await fetch('/add-shopping-item', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({note: val}) });
+            if (res.ok) window.location.reload();
+        }
+
+        function showLoading(msg, sub='') {
             document.getElementById('loading-overlay').style.display = 'flex';
             document.getElementById('loading-text').innerText = msg;
-            document.getElementById('loading-log').innerText = submsg;
-            document.getElementById('progress-bar-fill').style.width = '10%';
+            document.getElementById('loading-log').innerText = sub;
         }
 
         function submitPlanForm(e) {
             e.preventDefault();
-            const form = e.target;
-            const params = new URLSearchParams(new FormData(form));
-            showLoading('Preparing Your Menu', 'Initializing connection...');
-            
-            const eventSource = new EventSource(`/plan-stream?${params.toString()}`);
-            eventSource.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                if (data.status === 'complete') {
-                    eventSource.close();
-                    window.location.href = '/?success_msg=Menu Curated Successfully';
-                } else {
-                    if (data.status) document.getElementById('loading-log').innerText = data.status;
-                    if (data.progress) document.getElementById('progress-bar-fill').style.width = data.progress + '%';
-                }
+            const params = new URLSearchParams(new FormData(e.target));
+            showLoading('Curating Menu', 'Initializing agent...');
+            const es = new EventSource(`/plan-stream?${params.toString()}`);
+            es.onmessage = (ev) => {
+                const d = JSON.parse(ev.data);
+                if (d.status === 'complete') window.location.href = '/?success_msg=Menu Ready';
+                else document.getElementById('loading-log').innerText = d.status || '';
             };
-            eventSource.onerror = function() {
-                eventSource.close();
-                window.location.href = '/?error_msg=Menu generation encountered an error. Please check logs.';
-            };
+            es.onerror = () => window.location.href = '/?error_msg=Agent Error';
         }
 
-        async function quickAddShoppingItem() {
-            const input = document.getElementById('quick-add-input');
-            const note = input.value.trim();
-            if (!note) return;
-            const res = await fetch('/add-shopping-item', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note }) });
-            if (res.ok) window.location.reload();
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', () => {
             switchTab(localStorage.getItem('activeTab') || 'menu');
-
             document.querySelectorAll('.shopping-list-checkbox').forEach(cb => {
-                cb.addEventListener('change', async function() {
-                    const textSpan = this.parentElement.querySelector('.shopping-item-text');
-                    textSpan.classList.toggle('checked-item', this.checked);
-                    await fetch('/toggle-shopping-item', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ item_id: this.dataset.id, checked: this.checked })
-                    });
-                });
+                cb.onchange = async function() {
+                    this.parentElement.querySelector('.item-text').classList.toggle('checked', this.checked);
+                    await fetch('/toggle-shopping-item', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({item_id: this.dataset.id, checked: this.checked}) });
+                };
             });
+            
+            const cin = document.getElementById('chat-input');
+            const csend = document.getElementById('chat-send');
+            const cmessages = document.getElementById('chat-messages');
+            let history = JSON.parse(localStorage.getItem('mealie_chat_history') || '[]');
+            let messages = JSON.parse(localStorage.getItem('mealie_chat_messages') || '[]');
 
-            const chatTrigger = document.getElementById('chat-trigger');
-            const chatPanel = document.getElementById('chat-panel');
-            const chatClose = document.getElementById('chat-close');
-            const chatClear = document.getElementById('chat-clear');
-            const chatInput = document.getElementById('chat-input');
-            const chatSend = document.getElementById('chat-send');
-            const chatMessages = document.getElementById('chat-messages');
-
-            let chatHistory = JSON.parse(localStorage.getItem('mealie_chat_history') || '[]');
-            let displayedMessages = JSON.parse(localStorage.getItem('mealie_chat_messages') || '[]');
-
-            function appendMessage(sender, text, save=true) {
-                const msgDiv = document.createElement('div');
-                msgDiv.className = `chat-message ${sender}`;
-                msgDiv.innerHTML = text;
-                chatMessages.appendChild(msgDiv);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-                if (save) {
-                    displayedMessages.push({sender, text});
-                    localStorage.setItem('mealie_chat_messages', JSON.stringify(displayedMessages));
-                }
+            function addMsg(s, t, save=true) {
+                const d = document.createElement('div');
+                d.className = `chat-msg ${s === 'user' ? 'user' : 'bot'}`;
+                d.innerHTML = t; cmessages.appendChild(d); cmessages.scrollTop = cmessages.scrollHeight;
+                if (save) { messages.push({s, t}); localStorage.setItem('mealie_chat_messages', JSON.stringify(messages)); }
             }
-
-            displayedMessages.forEach(m => appendMessage(m.sender, m.text, false));
             
-            chatTrigger.addEventListener('click', () => chatPanel.classList.add('open'));
-            chatClose.addEventListener('click', () => chatPanel.classList.remove('open'));
-            
-            chatClear.addEventListener('click', () => {
-                if (confirm("Clear all chat history?")) {
-                    chatHistory = [];
-                    displayedMessages = [];
-                    localStorage.removeItem('mealie_chat_history');
-                    localStorage.removeItem('mealie_chat_messages');
-                    chatMessages.innerHTML = '';
-                    appendMessage('assistant', "Chef's log cleared. How can I help you today?");
-                }
-            });
+            messages.forEach(m => addMsg(m.s, m.t, false));
 
-            chatInput.addEventListener('input', () => chatSend.disabled = !chatInput.value.trim());
-            chatSend.addEventListener('click', async () => {
-                const text = chatInput.value.trim();
-                appendMessage('user', text);
-                chatInput.value = '';
-                chatSend.disabled = true;
-                const response = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, history: chatHistory }) });
-                const result = await response.json();
-                if (result.success) {
-                    appendMessage('assistant', result.reply);
-                    chatHistory = result.history;
-                    localStorage.setItem('mealie_chat_history', JSON.stringify(chatHistory));
-                }
-            });
+            document.getElementById('chat-clear').onclick = () => {
+                if (confirm("Clear history?")) { history = []; messages = []; localStorage.removeItem('mealie_chat_history'); localStorage.removeItem('mealie_chat_messages'); cmessages.innerHTML = ''; }
+            };
+
+            cin.oninput = () => csend.disabled = !cin.value.trim();
+            csend.onclick = async () => {
+                const t = cin.value.trim(); addMsg('user', t); cin.value = ''; csend.disabled = true;
+                const r = await fetch('/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({message: t, history}) });
+                const res = await r.json();
+                if (res.success) { addMsg('bot', res.reply); history = res.history; localStorage.setItem('mealie_chat_history', JSON.stringify(history)); }
+            };
         });
     </script>
 </body>
