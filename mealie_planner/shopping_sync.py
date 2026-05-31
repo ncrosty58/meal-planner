@@ -96,12 +96,21 @@ class ShoppingListSync:
             
             # Build set of low staples IDs (hyphen-insensitive)
             low_ids_clean = {s_id.replace('-', '').lower() for s_id in low_staples_ids}
-            print(f"[Sync] Normalized {len(low_ids_clean)} low staple IDs for matching.")
             
             # Map low staples to their notes (names) and build staples notes list
             staples_notes = [item['note'] for item in staples]
+            staple_names_lower = {s['note'].strip().lower() for s in staples}
 
-            # Parse freezer items for the AI skill payload
+            # State Preservation: If a staple is CURRENTLY on the active list, 
+            # treat it as "low" so the AI doesn't filter it out during this sync.
+            active_items = self.client.get_shopping_list_items_for_list(ACTIVE_LIST_ID)
+            active_staple_names = []
+            for item in active_items:
+                note = item.get('note', '').strip().lower()
+                if note in staple_names_lower:
+                    active_staple_names.append(item['note'])
+
+            # Parse freezer items
             inventory_items = []
             if freezer_items:
                 inventory_items = [i.strip() for i in freezer_items.split(",") if i.strip()]
@@ -112,7 +121,10 @@ class ShoppingListSync:
                 if clean_id in low_ids_clean:
                     low_staples_notes.append(item['note'])
             
-            print(f"[Sync] Identified {len(low_staples_notes)} staples marked as low: {low_staples_notes}")
+            # Combine modal-marked low staples with currently active ones
+            combined_low_staples = list(set(low_staples_notes + active_staple_names))
+            
+            print(f"[Sync] Low staples for AI: {combined_low_staples}")
                     
             # 2. Extract ingredient display strings from meals
             if progress_callback:
@@ -161,7 +173,7 @@ class ShoppingListSync:
                 "ingredients": raw_recipe_ingredients,
                 "staples": staples_notes,
                 "inventory_items": inventory_items,
-                "low_staples": low_staples_notes,
+                "low_staples": combined_low_staples,
                 "available_labels": available_label_names
             }
             
@@ -178,7 +190,7 @@ class ShoppingListSync:
                 "Return ONLY the JSON array of objects as specified in the skill definition."
             )
             
-            print(f"--- AI SHOPPING LIST SYNC PROMPT ({len(available_label_names)} zones) ---")
+            print(f"--- AI SHOPPING LIST SYNC PROMPT ({len(raw_recipe_ingredients)} ingredients, {len(combined_low_staples)} staples) ---")
             ai_response = self.gemini.call(prompt, expect_json=True)
             
             try:
@@ -192,26 +204,20 @@ class ShoppingListSync:
             if progress_callback:
                 progress_callback("Preserving your checkmarks...", 97)
             
-            # Map of note -> checked status for existing items
+            # Map of normalized string -> checked status
             checked_items_cache = {}
             try:
-                current_items = self.client.get_shopping_list_items_for_list(ACTIVE_LIST_ID)
-                for item in current_items:
+                # We use active_items fetched earlier
+                for item in active_items:
                     if item.get('checked'):
-                        # Mealie moves text between note, display, and originalText. 
-                        # We cache all of them to be safe.
-                        possible_texts = [
-                            item.get('note'),
-                            item.get('display'),
-                            item.get('originalText')
-                        ]
+                        # Cache various text fields to handle Mealie's internal re-parsing
+                        possible_texts = [item.get('note'), item.get('display'), item.get('originalText')]
                         for txt in possible_texts:
                             if txt:
-                                clean_txt = txt.strip().lower()
-                                checked_items_cache[clean_txt] = True
-                print(f"[Sync] Cached {len(checked_items_cache)} unique checked item strings for preservation.")
+                                checked_items_cache[txt.strip().lower()] = True
+                print(f"[Sync] Cached {len(checked_items_cache)} unique checked item strings.")
             except Exception as e:
-                print(f"[Sync] Warning: Could not fetch current list for state preservation: {e}")
+                print(f"[Sync] Warning: State preservation failed: {e}")
 
             # 5. Write to Mealie
             if progress_callback:
@@ -229,30 +235,27 @@ class ShoppingListSync:
                 unit = item.get('unit') or ''
                 unit = unit.strip()
                 
-                # AI returns the label name from our filtered list
                 category_name = item.get('category')
                 label_id = label_name_to_id.get(category_name) if category_name else None
-                
-                # For ingredients, include the unit in the note (e.g. "1 lb Chicken Breast")
                 full_note = f"{unit} {name}".strip() if unit else name
                 
-                # Safe Sync: Check if this item was previously checked off
+                # Safe Sync: Match against cache
                 is_checked = False
                 note_key = full_note.strip().lower()
                 clean_name = name.strip().lower()
                 
-                # 1. Exact match against any previous string
                 if note_key in checked_items_cache or clean_name in checked_items_cache:
                     is_checked = True
                 else:
-                    # 2. Fuzzy match: check if clean name is a subset of any old checked note (or vice versa)
-                    for old_note in checked_items_cache.keys():
-                        if clean_name in old_note or old_note in clean_name:
-                            is_checked = True
-                            break
+                    # Tightened fuzzy match: only if name is significant (3+ chars)
+                    if len(clean_name) > 2:
+                        for old_note in checked_items_cache.keys():
+                            # Require word-boundary or containment that isn't too broad
+                            if clean_name in old_note or old_note in clean_name:
+                                is_checked = True
+                                break
                 
-                if is_checked:
-                    preserved_count += 1
+                if is_checked: preserved_count += 1
 
                 ingredients_list.append({
                     "shoppingListId": ACTIVE_LIST_ID,
@@ -263,7 +266,7 @@ class ShoppingListSync:
                     "labelId": label_id
                 })
             
-            print(f"[Sync] Preserved {preserved_count} checkmarks from previous list.")
+            print(f"[Sync] Preserved {preserved_count} checkmarks.")
             self.client.add_shopping_list_items_bulk(ingredients_list)
             
             if progress_callback:
