@@ -85,11 +85,40 @@ class ShoppingListSync:
             if progress_callback:
                 progress_callback("Generating final shopping list using AI...", 96)
             
+            # Fetch actual labels from Mealie
+            all_labels = self.client.get_labels()
+            
+            # Label Preference Filter: If we have specific names, don't even let the AI see the generic ones.
+            # This ensures Mealie saves the data using the "clean" labels.
+            PREFERENCE_MAP = {
+                "Vegetables & Greens": ["1. Produce", "Produce"],
+                "Bakery": ["2. Bakery"],
+                "Meats": ["3. Meat, Seafood & Vegetarian Alternatives", "Meat", "3. Meat & Seafood"],
+                "Poultry": ["3. Meat, Seafood & Vegetarian Alternatives", "Meat", "3. Meat & Seafood"],
+                "Fish": ["3. Meat, Seafood & Vegetarian Alternatives", "Meat", "3. Meat & Seafood"],
+                "Dairy & Eggs": ["4. Dairy, Cheese & Eggs", "Dairy"],
+                "Pantry": ["5. Pantry / Center Aisle Grains & Canned Goods"],
+                "Baking": ["6. Baking, Spices, Oils & Condiments", "6. Baking, Spices & Condiments"],
+                "Frozen Foods": ["7. Frozen Foods"],
+                "Beverages": ["8. Beverages"]
+            }
+
+            label_names = {l['name'] for l in all_labels}
+            labels_to_suppress = set()
+            for preferred, generics in PREFERENCE_MAP.items():
+                if preferred in label_names:
+                    labels_to_suppress.update(generics)
+            
+            filtered_labels = [l for l in all_labels if l['name'] not in labels_to_suppress]
+            available_label_names = [l['name'] for l in filtered_labels]
+            label_name_to_id = {l['name']: l['id'] for l in filtered_labels}
+
             payload = {
                 "ingredients": raw_recipe_ingredients,
                 "staples": staples_notes,
                 "inventory_items": inventory_items,
-                "low_staples": low_staples_notes
+                "low_staples": low_staples_notes,
+                "available_labels": available_label_names
             }
             
             prompt = (
@@ -105,7 +134,7 @@ class ShoppingListSync:
                 "Return ONLY the JSON array of objects as specified in the skill definition."
             )
             
-            print("--- AI SHOPPING LIST SYNC PROMPT ---")
+            print(f"--- AI SHOPPING LIST SYNC PROMPT ({len(available_label_names)} labels) ---")
             ai_response = self.gemini.call(prompt, expect_json=True)
             
             try:
@@ -115,25 +144,7 @@ class ShoppingListSync:
             except Exception as e:
                 raise SkillParsingError(f"Failed to parse AI response: {e}")
 
-            # 4. Official Mealie Categorization (Mirror Mealie)
-            if progress_callback:
-                progress_callback("Categorizing items according to Mealie...", 97)
-            
-            # Extract names to batch-parse them for official labels
-            cleaned_names = [item.get('name', 'Unknown Item') for item in final_items]
-            official_parsed = self.client.parse_raw_ingredients(cleaned_names)
-            
-            # Map the official Mealie label back to our final items
-            for idx, item in enumerate(final_items):
-                if idx < len(official_parsed):
-                    # official_parsed is a list of ingredient objects
-                    # We want the labelId from the food object if it exists
-                    parsed_ing = official_parsed[idx]
-                    food = parsed_ing.get('food')
-                    if food and food.get('labelId'):
-                        item['labelId'] = food['labelId']
-
-            # 5. Write to Mealie
+            # 4. Write to Mealie
             if progress_callback:
                 progress_callback("Writing items to Mealie shopping list...", 98)
             
@@ -148,7 +159,9 @@ class ShoppingListSync:
                 unit = item.get('unit') or ''
                 unit = unit.strip()
                 
-                label_id = item.get('labelId')
+                # AI returns the label name from our filtered list
+                category_name = item.get('category')
+                label_id = label_name_to_id.get(category_name) if category_name else None
                 
                 # For ingredients, include the unit in the note (e.g. "1 lb Chicken Breast")
                 full_note = f"{unit} {name}".strip() if unit else name

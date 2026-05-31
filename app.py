@@ -131,24 +131,11 @@ def index():
         shopping_list = []
         try:
             shopping_list = client.get_shopping_list_items_for_list(ACTIVE_LIST_ID)
-            
-            # Normalization helper for sorting (Must match index.html logic)
-            def normalize_label_name(label_obj):
-                if not label_obj or not isinstance(label_obj, dict):
-                    return 'Uncategorized'
-                name = label_obj.get('name', 'Uncategorized')
-                if name in ['1. Produce', 'Produce']:
-                    return 'Vegetables & Greens'
-                if '. ' in name:
-                    return name.split('. ', 1)[1]
-                return name
-
-            # Sort by normalized label name first, then by position
+            # Sort by label name first (to group them for the UI), then by position
             def get_sort_key(item):
-                norm_name = normalize_label_name(item.get('label'))
-                return (norm_name if norm_name != 'Uncategorized' else 'ZZZ', 
-                        item.get('position', 0), 
-                        item.get('note', ''))
+                label = item.get('label')
+                name = label.get('name') if isinstance(label, dict) else 'Uncategorized'
+                return (name if name != 'Uncategorized' else 'ZZZ', item.get('position', 0), item.get('note', ''))
             
             shopping_list.sort(key=get_sort_key)
         except Exception as e:
