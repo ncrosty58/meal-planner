@@ -22,14 +22,14 @@ This skill takes the raw ingredient strings from dinner recipes, a list of house
     - Detect any ingredients representing plain tap water (e.g., "water", "cold water", "hot water", "tap water", "water to cover"). Exclude them entirely from the output.
     - Keep specialty waters that must be purchased (e.g., "coconut water", "rose water", "sparkling water").
 
-2.  **Filter Staples and Inventory:**
-    - Compare each recipe ingredient against the combined list of `staples` and `inventory_items`.
-    - Handle exact, singular/plural, and minor semantic variations (e.g. "cloves of garlic" or "garlic cloves" or "garlic" vs "garlic").
-    - For `inventory_items`, prioritize matching the core ingredient (e.g., "1 lb chicken thighs" should match "chicken thighs" in a recipe).
-    - If the ingredient matches a staple or an inventory item:
-      - Exclude it *unless* it matches an item in the `low_staples` list.
-      - If it is in the `low_staples` list, include it.
-    - If the ingredient does not match a staple or inventory item, include it.
+2.  **Filter Staples and Inventory (Rigorous Semantic Matching):**
+    - You MUST compare every recipe ingredient against the `staples` and `inventory_items` lists.
+    - **Deep Semantic Filtering:** Do not just look for exact name matches. Use your culinary knowledge to identify if an ingredient is a form of a staple.
+        - *Example:* If "Olive Oil" is a staple, you MUST filter out "Extra Virgin Olive Oil", "2 tbsp Olive Oil", "Olive oil for frying", etc.
+        - *Example:* If "Garlic" is a staple, filter out "3 cloves Garlic", "Minced Garlic", etc.
+    - **Exception Rule:** If the matched staple is explicitly listed in the `low_staples` list, you MUST include it in the final list.
+    - **Inventory Rule:** If an ingredient matches an `inventory_item`, filter it out.
+    - **Rule of Thumb:** If Nathan and Kristin already have it (Staple) or want to use it up (Inventory), and it's NOT low (Low Staples), do not put it on the shopping list.
 
 3.  **Clean Ingredient Names & Organic Tagging:**
     - For each ingredient, extract the core name by removing quantities, units, and preparation instructions.

@@ -189,6 +189,8 @@ class ShoppingListSync:
             )
             
             ai_response = self.gemini.call(prompt, expect_json=True)
+            print("--- AI SHOPPING LIST SYNC RESPONSE ---")
+            print(ai_response)
             
             try:
                 final_items = json.loads(ai_response)
@@ -206,50 +208,47 @@ class ShoppingListSync:
             current_map = {}
             for item in active_items:
                 f_id = item.get('foodId') or (item.get('food', {}) or {}).get('id')
+                note = item.get('note', '').strip().lower()
+                
                 if f_id:
                     current_map[f_id] = item
-                else:
-                    note = item.get('note', '').strip().lower()
-                    if note:
-                        current_map[note] = item
+                if note:
+                    current_map[note] = item
 
             to_add = []
             to_update = []
             matched_current_ids = set()
 
-            # Step B: Match new items against current ones
-            # First, we need to get Mealie IDs for our new items
-            new_item_names = [item.get('name', 'Unknown') for item in final_items]
-            new_item_structures = self.client.parse_raw_ingredients(new_item_names)
-
             for idx, ai_item in enumerate(final_items):
                 name = ai_item.get('name', 'Unknown Item')
                 qty = ai_item.get('quantity', 1.0)
                 unit = ai_item.get('unit') or ''
+                category_name = ai_item.get('category')
                 
-                # Get structured info from Mealie parser
-                m_ing = new_item_structures[idx] if idx < len(new_item_structures) else {}
-                m_food_id = (m_ing.get('food', {}) or {}).get('id')
-                m_label_id = (m_ing.get('food', {}) or {}).get('labelId')
-                m_unit_id = (m_ing.get('unit', {}) or {}).get('id')
-                
+                label_id = label_name_to_id.get(category_name)
                 full_note = f"{unit.strip()} {name}".strip() if unit else name
                 
                 # Try to find match
-                match = current_map.get(m_food_id) if m_food_id else None
-                if not match:
-                    match = current_map.get(full_note.strip().lower())
+                # 1. Direct name match (high priority)
+                match = current_map.get(full_note.strip().lower())
                 
+                # 2. Base name match (e.g. "Olive Oil" matches "2 tbsp Olive Oil")
+                if not match:
+                    clean_name = name.strip().lower()
+                    for existing_note, existing_item in current_map.items():
+                        if clean_name == existing_note or clean_name in existing_note:
+                            match = existing_item
+                            break
+
                 if match:
-                    # UPDATE existing item
                     matched_current_ids.add(match['id'])
-                    # Preserve checked status!
+                    # UPDATE existing item (Preserve checked status!)
                     updated_item = match.copy()
                     updated_item['note'] = full_note
                     updated_item['quantity'] = qty
-                    updated_item['unitId'] = m_unit_id
-                    updated_item['foodId'] = m_food_id
-                    updated_item['labelId'] = m_label_id or match.get('labelId')
+                    updated_item['labelId'] = label_id or match.get('labelId')
+                    # We don't overwrite foodId/unitId here if they exist, 
+                    # Mealie handles them on its end.
                     to_update.append(updated_item)
                 else:
                     # ADD new item
@@ -258,9 +257,7 @@ class ShoppingListSync:
                         "note": full_note,
                         "quantity": qty,
                         "checked": False,
-                        "unitId": m_unit_id,
-                        "foodId": m_food_id,
-                        "labelId": m_label_id,
+                        "labelId": label_id,
                         "position": idx
                     })
 
