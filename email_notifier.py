@@ -163,9 +163,16 @@ def send_saturday_report_email(start_date_str, end_date_str, exclude_text, freez
                 elif sat_dn_item.get('title'):
                     sat_dn_title = sat_dn_item['title']
 
-            # Griddle prep check for today (Saturday)
+            # Dinner prep check (incorporating AI prep note from Mealie if available)
             today_prep_tip = ""
-            if sat_recipe and check_blackstone_compatibility(sat_recipe):
+            ai_prep_note = sat_dn_item.get('text') or "" if sat_dn_item else ""
+            if ai_prep_note:
+                today_prep_tip = f"""
+                <div style="background-color: #fff9db; border-left: 4px solid #fcc419; padding: 15px; border-radius: 4px; margin: 15px 0; font-size: 14px; color: #5c3e03;">
+                  📝 <strong>Dinner Prep Instructions:</strong> {ai_prep_note}
+                </div>
+                """
+            elif sat_recipe and check_blackstone_compatibility(sat_recipe):
                 today_prep_tip = """
                 <div style="background-color: #fff9db; border-left: 4px solid #fcc419; padding: 15px; border-radius: 4px; margin: 15px 0; font-size: 14px; color: #5c3e03;">
                   🍳 <strong>Blackstone Griddle Fired Up!</strong> Tonight's dinner is griddle-ready. Consider batch-cooking proteins or veggies for the coming days while it's hot!

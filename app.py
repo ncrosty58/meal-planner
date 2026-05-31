@@ -378,9 +378,16 @@ def send_daily_reminder_job():
         
         nut_text += f"<span style='display:inline-block; margin-right: 15px; background: #f1f3f5; padding: 5px 10px; border-radius: 4px; font-size:13px;'><strong>{k.capitalize()}</strong>: {v} {unit} (<span style='color:{color}; font-weight:bold;'>{pct}%</span>)</span>"
 
-    # Griddle prep check
+    # Dinner prep check (incorporating AI prep note from Mealie if available)
     prep_tip = ""
-    if dn_recipe and check_blackstone_compatibility(dn_recipe):
+    ai_prep_note = dinner_item.get('text') or "" if dinner_item else ""
+    if ai_prep_note:
+        prep_tip = f"""
+        <div style="background-color: #fff9db; border-left: 4px solid #fcc419; padding: 15px; border-radius: 4px; margin: 20px 0; font-size: 14px; color: #5c3e03;">
+          📝 <strong>Dinner Prep Instructions:</strong> {ai_prep_note}
+        </div>
+        """
+    elif dn_recipe and check_blackstone_compatibility(dn_recipe):
         prep_tip = """
         <div style="background-color: #fff9db; border-left: 4px solid #fcc419; padding: 15px; border-radius: 4px; margin: 20px 0; font-size: 14px; color: #5c3e03;">
           <strong>🍳 Blackstone Griddle Alert:</strong> Tonight's dinner uses the Blackstone! Remember to check Mealie for the next few days to see if you can double-cook proteins or veggies right now.
