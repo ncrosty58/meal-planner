@@ -60,7 +60,7 @@ class ShoppingListSync:
             return False
 
     def sync_shopping_list(self, start_date_str, end_date_str, low_staples_ids=[], progress_callback=None, freezer_items="") -> bool:
-        """Non-destructive sync using Food-Entity fingerprinting to protect checkmarks and staples."""
+        """Non-destructive sync using Multi-Tiered matching to protect checkmarks and staples."""
         print(f"Starting non-destructive sync for {start_date_str} to {end_date_str}...")
         if progress_callback: progress_callback("Sync started...", 90)
         
@@ -73,49 +73,52 @@ class ShoppingListSync:
             active_items = self.client.get_shopping_list_items_for_list(ACTIVE_LIST_ID)
             
             staple_names_lower = {s['note'].strip().lower() for s in staples}
-            low_staples_notes = [s['note'] for s in staples if s['id'].replace('-', '').lower() in {sid.replace('-', '').lower() for sid in low_staples_ids}]
+            low_ids_clean = {sid.replace('-', '').lower() for sid in low_staples_ids}
+            low_staples_notes = [s['note'] for s in staples if s['id'].replace('-', '').lower() in low_ids_clean]
 
-            # 2. Extract and Parse current items to build entity map
+            # 2. Analyze current items for "Checkmark Memory"
             if progress_callback: progress_callback("Analyzing current progress...", 93)
             
-            current_entity_map = {} # food_name_lower -> item_obj
+            # Memory of what was checked
+            checked_notes = set()    # Exact strings
+            checked_entities = set() # Base food names
+            checked_keywords = set() # Individual core words
             active_staple_notes = []
             
             if active_items:
                 current_notes = [item.get('note', '') for item in active_items]
                 current_parsed = self.client.parse_raw_ingredients(current_notes)
+                
                 for idx, item in enumerate(active_items):
                     p_ing = current_parsed[idx] if idx < len(current_parsed) else {}
                     food_name = (p_ing.get('food', {}) or {}).get('name', '').strip().lower()
-                    if food_name:
-                        current_entity_map[food_name] = item
-                        if food_name in staple_names_lower:
-                            active_staple_notes.append(item['note'])
+                    note_lower = item.get('note', '').strip().lower()
+                    
+                    # Track staples currently on the list for AI protection
+                    if food_name in staple_names_lower or note_lower in staple_names_lower:
+                        active_staple_notes.append(item['note'])
+
+                    if item.get('checked'):
+                        checked_notes.add(note_lower)
+                        if food_name: checked_entities.add(food_name)
+                        # Keywords (e.g., "Chicken", "Cilantro")
+                        keywords = [w for w in re.findall(r'\w+', note_lower) if len(w) > 3]
+                        checked_keywords.update(keywords)
 
             # 3. Extract ingredients from scheduled recipes
-            if progress_callback: progress_callback("Finding recipes and ingredients...", 94)
-            
             recipe_ids_to_fetch = set()
-            meal_plan_mapping = [] # List of (entry, derived_rid)
-            
+            meal_plan_mapping = []
             all_recipes_overview = self.crawler.get_recipes_from_db()
             
             for p in meal_plans:
                 rid = p.get('recipeId')
                 title = p.get('title') or ""
-                
-                # If it's a text-based entry, try to find a matching recipe
                 if not rid and title:
                     if title.lower().strip() not in {"leftovers", "pb&j sandwich", "eating out", "skipped", "cereal & milk", "oats", "planned meal", "planned dinner"}:
-                        # Note: This might still trigger a crawler cache build, but it's now safe
                         rid = self.crawler.find_recipe_for_ingredient(title, all_recipes=all_recipes_overview)
-                
-                if rid:
-                    recipe_ids_to_fetch.add(rid)
-                
+                if rid: recipe_ids_to_fetch.add(rid)
                 meal_plan_mapping.append((p, rid))
 
-            # Bulk fetch all required recipe details at once
             print(f"[Sync] Bulk fetching details for {len(recipe_ids_to_fetch)} unique recipes.")
             details_map = self.client.get_recipes_details_bulk(list(recipe_ids_to_fetch))
 
@@ -128,20 +131,17 @@ class ShoppingListSync:
                             txt = ing.get('display') or ing.get('originalText') or ""
                             if txt.strip(): raw_recipe_ingredients.append(txt.strip())
 
-            print(f"[Sync] Extracted {len(raw_recipe_ingredients)} raw ingredient strings.")
-
             # 4. Call AI Skill
             if progress_callback: progress_callback("Generating optimized list...", 96)
             
             combined_low = list(set(low_staples_notes + active_staple_notes))
-            inventory_items = [i.strip() for i in freezer_items.split(",")] if freezer_items else []
             all_labels = self.client.get_labels()
             label_name_to_id = {l['name']: l['id'] for l in all_labels}
 
             payload = {
                 "ingredients": raw_recipe_ingredients,
                 "staples": [s['note'] for s in staples],
-                "inventory_items": inventory_items,
+                "inventory_items": [i.strip() for i in freezer_items.split(",")] if freezer_items else [],
                 "low_staples": combined_low,
                 "available_labels": [l['name'] for l in all_labels]
             }
@@ -150,7 +150,7 @@ class ShoppingListSync:
             ai_response = self.gemini.call(prompt, expect_json=True)
             final_items = json.loads(ai_response)
 
-            # 5. Smart Merge
+            # 5. Smart Merge with Multi-Tiered Matching
             if progress_callback: progress_callback("Merging changes...", 98)
             
             new_item_names = [item.get('name', 'Unknown') for item in final_items]
@@ -162,21 +162,52 @@ class ShoppingListSync:
                 name, qty, unit = ai_item.get('name', 'Unknown'), ai_item.get('quantity', 1.0), ai_item.get('unit') or ''
                 cat_name = ai_item.get('category')
                 full_note = f"{unit.strip()} {name}".strip() if unit else name
+                note_lower = full_note.strip().lower()
                 
                 m_ing = new_parsed[idx] if idx < len(new_parsed) else {}
                 new_food_name = (m_ing.get('food', {}) or {}).get('name', '').strip().lower()
+                new_food_id = (m_ing.get('food', {}) or {}).get('id')
                 
-                # Match by entity or name
-                match = current_entity_map.get(new_food_name) if new_food_name else None
-                if not match: match = next((i for i in active_items if i['note'].strip().lower() == full_note.strip().lower()), None)
-                
+                # Checkmark Memory Match
+                is_checked = False
+                if note_lower in checked_notes: is_checked = True
+                elif new_food_name and new_food_name in checked_entities: is_checked = True
+                else:
+                    new_keywords = [w for w in re.findall(r'\w+', note_lower) if len(w) > 3]
+                    for kw in new_keywords:
+                        if kw in checked_keywords:
+                            is_checked = True
+                            break
+
+                # Object Matching (to prevent duplicates/re-creation)
+                # 1. Direct name match
+                match = next((i for i in active_items if i['note'].strip().lower() == note_lower), None)
+                # 2. Entity ID match
+                if not match and new_food_id:
+                    match = next((i for i in active_items if (i.get('foodId') or (i.get('food') or {}).get('id')) == new_food_id), None)
+                # 3. Fuzzy core-word match (prevent re-adding slightly differently named items)
+                if not match and new_food_name:
+                    match = next((i for i in active_items if new_food_name in i['note'].lower()), None)
+
                 if match:
                     matched_ids.add(match['id'])
                     updated = match.copy()
-                    updated.update({"note": full_note, "quantity": qty, "labelId": label_name_to_id.get(cat_name) or match.get('labelId')})
+                    updated.update({
+                        "note": full_note, 
+                        "quantity": qty, 
+                        "checked": is_checked, 
+                        "labelId": label_name_to_id.get(cat_name) or match.get('labelId')
+                    })
                     to_update.append(updated)
                 else:
-                    to_add.append({"shoppingListId": ACTIVE_LIST_ID, "note": full_note, "quantity": qty, "checked": False, "labelId": label_name_to_id.get(cat_name), "position": idx})
+                    to_add.append({
+                        "shoppingListId": ACTIVE_LIST_ID, 
+                        "note": full_note, 
+                        "quantity": qty, 
+                        "checked": is_checked, 
+                        "labelId": label_name_to_id.get(cat_name), 
+                        "position": idx
+                    })
 
             to_delete = [i['id'] for i in active_items if i['id'] not in matched_ids]
 
