@@ -81,7 +81,10 @@ def index():
 
     # 1. Determine if a meal plan is already active for the upcoming/current week
     start_date_str, end_date_str = get_planning_dates()
-    meal_plans = client.get_meal_plan(start_date_str, end_date_str)
+    raw_plans = client.get_meal_plan(start_date_str, end_date_str)
+    
+    # Handle both list and dict responses from Mealie
+    meal_plans = raw_plans.get('items', []) if isinstance(raw_plans, dict) else raw_plans
     
     # Check if there are scheduled dinner recipes in the database
     dinners = [p for p in meal_plans if p['entryType'] == 'dinner' and (p.get('recipeId') or p.get('title') == 'Eating Out')]
