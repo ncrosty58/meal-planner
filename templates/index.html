@@ -362,8 +362,8 @@
             display: inline-block;
             font-family: var(--font-display);
             font-weight: 600;
-            font-size: 1rem;
-            padding: 0.85rem 2rem;
+            font-size: 0.9rem;
+            padding: 0.5rem 1.25rem;
             border-radius: 10px;
             border: none;
             cursor: pointer;
@@ -671,10 +671,10 @@
                     <textarea class="textarea-input" id="exclude_text" name="exclude_text" placeholder="e.g. Skip dinner on Monday and Tuesday, no breakfast on Friday, out for Saturday lunch..."></textarea>
                 </div>
 
-                <!-- Freezer Items -->
+                <!-- Freezer/Pantry/Fridge Items -->
                 <div class="form-group" style="margin-top: 2rem;">
-                    <label class="form-label" for="freezer_items">Freezer items to use up this week</label>
-                    <textarea class="textarea-input" id="freezer_items" name="freezer_items" placeholder="e.g. broccoli, frozen peas..."></textarea>
+                    <label class="form-label" for="freezer_items">Freezer, pantry, or refrigerated items to use up this week</label>
+                    <textarea class="textarea-input" id="freezer_items" name="freezer_items" placeholder="e.g. frozen peas, pantry pasta, refrigerated chicken..."></textarea>
                 </div>
 
                 <!-- Special Requests -->
@@ -693,15 +693,6 @@
         
         <!-- STATE B: ACTIVE WEEK DASHBOARD -->
         
-        <!-- Blackstone and Prep suggestions -->
-        {% if blackstone_tips %}
-            {% for tip in blackstone_tips %}
-            <div class="alert alert-info">
-                <span>{{ tip | safe }}</span>
-            </div>
-            {% endfor %}
-        {% endif %}
-
         <div class="dashboard-grid">
             
             <!-- Column 1: Weekly Calendar & Controls -->
@@ -720,26 +711,23 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% set day_order = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] %}
-                            {% for day in day_order %}
+                            {% for d_str in planning_dates %}
+                                {% set day = d_str | select_day_name %}
                                 {% set meals = {'breakfast': 'Staples', 'lunch': 'Leftovers', 'dinner': 'Eating Out'} %}
                                 {% set dinner_entry = [] %}
                                 
                                 {% for item in meal_plans %}
-                                    <!-- Parse day name -->
-                                    {% set item_day = item.date | select_day_name %}
-                                    {% if item_day == day %}
+                                    {% if item.date == d_str %}
                                         {% if item.entryType == 'breakfast' %}
                                             {% set _ = meals.update({'breakfast': item.title}) %}
                                         {% elif item.entryType == 'lunch' %}
                                             {% set _ = meals.update({'lunch': item.title}) %}
                                         {% elif item.entryType == 'dinner' %}
+                                            {% set _ = dinner_entry.append(item) %}
                                             {% if item.recipeId %}
                                                 {% set _ = meals.update({'dinner': item.recipe.name}) %}
-                                                {% set _ = dinner_entry.append(item) %}
                                             {% elif item.title %}
                                                 {% set _ = meals.update({'dinner': item.title}) %}
-                                                {% set _ = dinner_entry.append(item) %}
                                             {% endif %}
                                         {% endif %}
                                     {% endif %}
@@ -749,37 +737,38 @@
                                     <td>
                                         <div class="day-name">{{ day }}</div>
                                         <div style="font-size: 0.75rem; color: var(--text-muted);">
-                                            {% for item in meal_plans %}
-                                                {% if item.date | select_day_name == day and loop.first %}
-                                                    {{ item.date }}
-                                                {% endif %}
-                                            {% endfor %}
+                                            {{ d_str }}
                                         </div>
                                     </td>
                                     <td>
                                         <div class="meal-desc">☕ <strong>B:</strong> {{ meals.breakfast }}</div>
                                         <div class="meal-desc">🥗 <strong>L:</strong> {{ meals.lunch }}</div>
                                         <div class="meal-desc" style="color: var(--color-primary); font-weight: 500; font-size: 0.95rem; margin-top: 0.25rem;">
-                                            🥘 <strong>D:</strong> {{ meals.dinner }}
+                                            🥘 <strong>D:</strong> 
+                                            {% if dinner_entry and dinner_entry[0].recipeId %}
+                                                <a href="https://mealie.cosmoslab.dev/g/home/r/{{ dinner_entry[0].recipe.slug }}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dotted var(--color-primary);">{{ meals.dinner }}</a>
+                                                {% if dinner_entry[0].is_blackstone %}
+                                                    <span style="font-size: 0.75rem; background: rgba(229, 131, 37, 0.2); color: var(--color-primary); padding: 1px 6px; border-radius: 4px; margin-left: 5px; font-weight: bold;">🍳 GRIDDLE</span>
+                                                {% endif %}
+                                            {% else %}
+                                                {{ meals.dinner }}
+                                            {% endif %}
                                         </div>
                                     </td>
                                     <td>
-                                        {% if dinner_entry %}
-                                            <form action="{{ url_for('change_meal') }}" method="POST">
-                                                <input type="hidden" name="date" value="{{ dinner_entry[0].date }}">
-                                                <input type="hidden" name="entry_id" value="{{ dinner_entry[0].id }}">
-                                                <select name="recipe_id" class="select-recipe" onchange="this.form.submit()">
-                                                    <option value="">-- Swap Dinner Recipe --</option>
-                                                    {% for rec in all_recipes %}
-                                                        <option value="{{ rec.id }}" {% if rec.id == dinner_entry[0].recipeId %}selected{% endif %}>
-                                                            {{ rec.name }}
-                                                        </option>
-                                                    {% endfor %}
-                                                </select>
-                                            </form>
-                                        {% else %}
-                                            <span style="color: var(--text-muted); font-size: 0.85rem;">No active dinner</span>
-                                        {% endif %}
+                                        <form action="{{ url_for('change_meal') }}" method="POST">
+                                            <input type="hidden" name="date" value="{{ d_str }}">
+                                            <input type="hidden" name="entry_id" value="{{ dinner_entry[0].id if dinner_entry else '' }}">
+                                            <select name="recipe_id" class="select-recipe" onchange="this.form.submit()">
+                                                <option value="">-- Choose Dinner --</option>
+                                                <option value="SKIP" {% if dinner_entry and not dinner_entry[0].recipeId %}selected{% endif %}>🚫 No Dinner / Eating Out</option>
+                                                {% for rec in all_recipes %}
+                                                    <option value="{{ rec.id }}" {% if dinner_entry and rec.id == dinner_entry[0].recipeId %}selected{% endif %}>
+                                                        {{ rec.name }}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+                                        </form>
                                     </td>
                                 </tr>
                             {% endfor %}
@@ -791,14 +780,14 @@
                     <div class="card-title">
                         ⚙️ Planner Controls
                     </div>
-                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
                         <button type="button" class="btn btn-secondary" onclick="openStaplesModal()">📋 Manage Staples</button>
 
                         <form action="{{ url_for('sync') }}" method="POST" id="sync-list-form">
                             <button type="submit" class="btn btn-secondary">🔄 Update Shopping List</button>
                         </form>
                         
-                        <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('Are you sure you want to clear the active shopping list and all scheduled meal plans for the current and next weeks?');">
+                        <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('ARE YOU SURE? This will delete all current and next week meal plans and clear the active shopping list.');">
                             <button type="submit" class="btn btn-danger">🗑️ Clear & Reset Plan</button>
                         </form>
 
@@ -849,9 +838,11 @@
                             <div class="shopping-item">
                                 <span>
                                     {% if item.checked %}
-                                        <del style="color: var(--text-muted);">{{ item.note }}</del>
+                                        <del style="color: var(--text-muted);">
+                                            {% if item.quantity > 0 %}{{ item.quantity | float | round(2) | string | replace('.0', '') }} {% endif %}{{ item.note }}
+                                        </del>
                                     {% else %}
-                                        {{ item.note }}
+                                        <strong>{% if item.quantity > 0 %}{{ item.quantity | float | round(2) | string | replace('.0', '') }} {% endif %}</strong>{{ item.note }}
                                     {% endif %}
                                 </span>
                                 {% if "buy organic" in item.note.lower() %}
@@ -946,12 +937,12 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            // 1. Swap Dinner recipe dropdown change event
+            // 1. Dinner recipe dropdown change event
             const recipeSelects = document.querySelectorAll('.select-recipe');
             recipeSelects.forEach(function(select) {
                 select.addEventListener('change', function() {
                     if (this.value) {
-                        showLoading('Swapping Recipe & Updating List...');
+                        showLoading('Updating Dinner & List...');
                     }
                 });
             });

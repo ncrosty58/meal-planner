@@ -24,11 +24,12 @@ This skill contains the constraints, business rules, and integration workflows f
 - **Forbidden Meats**: Strictly avoid processed sausage-type meats (hot dogs, chorizo, salami, pepperoni, bacon, ham, pancetta).
 - **Fiber Target**: Highly prioritize dietary fiber (target `28g` daily per person baseline). Focus on beans, lentils, whole grains, and fiber-rich vegetables.
 - **Organic Target**: Automatically append `(Buy Organic)` to ingredients matching the USDA "Dirty Dozen" (strawberries, spinach, kale, collard/mustard greens, grapes, peaches, pears, nectarines, apples, bell peppers, hot/chili peppers, cherries, blueberries, green beans).
+- **Note on Children**: While the family includes children, nutritional targets in reporting are currently baselined against a 2000 kcal adult average for simplicity.
 
 ## Mealie Setup & State Constants
 - **Active Shopping List ID**: `9a1e2d1e33f24f27a01fef55c89a92de` (renamed from "Nathans Shopping List" to "Active Shopping list").
 - **Staples List ID**: `1196f23a527b42a9a75b1c3850251948` (named "Staple items").
-- **Auth Token**: Retrieved dynamically from the Mealie SQLite DB volume (`/mealie-data/mealie.db` or `/app/data/mealie.db`) where `name = 'AntigravityToken'`.
+- **Auth Token**: Retrieved securely via the `MEALIE_TOKEN` environment variable. Never from a database fallback.
 - **Planning Week format**: Anchored strictly on a **Saturday-to-Friday** schedule.
 
 ## Blackstone Griddle Logic

@@ -100,9 +100,13 @@ BREAKFAST_PROFILES = {
     }
 }
 
-# Lunch Leftover Nutrition Profile
+# Lunch Nutrition Profiles
 LUNCH_LEFTOVER_PROFILE = {
     "calories": 500, "protein": 22, "carbs": 55, "fat": 15, "fiber": 5, "sodium": 600, "sugar": 5, "cholesterol": 40
+}
+
+LUNCH_SANDWICH_PROFILE = {
+    "calories": 450, "protein": 18, "carbs": 45, "fat": 14, "fiber": 4, "sodium": 800, "sugar": 6, "cholesterol": 35
 }
 
 # Recommended Daily Allowances (Individual Baseline Reference)
@@ -116,3 +120,19 @@ RDA = {
     "sugar": 50,
     "cholesterol": 300
 }
+
+def get_banned_recipes():
+    """Load the list of banned recipes from the banned-recipes skill."""
+    content = load_skill_md('banned-recipes')
+    if not content:
+        return []
+    section = extract_section(content, 'Banned Recipes List')
+    banned = []
+    for line in section.split('\n'):
+        line = line.strip()
+        if line.startswith('- ') or line.startswith('* '):
+            # Extract recipe name up to the colon (if present) or just the whole line
+            name = line[2:].split(':', 1)[0].strip()
+            if name:
+                banned.append(name)
+    return banned
