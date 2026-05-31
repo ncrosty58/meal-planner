@@ -9,6 +9,7 @@
   "background_color": "#0B0F19",
   "theme_color": "#0B0F19",
   "orientation": "any",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/static/favicon.svg",
