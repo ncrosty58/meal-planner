@@ -447,16 +447,20 @@
                     <button class="btn btn-primary" onclick="quickAddShoppingItem()">Add</button>
                 </div>
                 <div class="shopping-list-grid">
-                    {% set last_label = [None] %}
+                    {% set ns = namespace(last_label=None) %}
                     {% for item in shopping_list %}
-                        {% if (item.label and item.label.name != last_label[0]) or (not item.label and last_label[0] != 'Uncategorized') %}
+                        {% set current_label_name = item.label.name if item.label else 'Uncategorized' %}
+
+                        {% if current_label_name != ns.last_label %}
                             {% if not loop.first %}</div></div>{% endif %}
                             <div class="category-group">
-                            <div class="category-title">{{ item.label.name if item.label else 'General Items' }}</div>
+                            <div class="category-title">{{ 'General Items' if current_label_name == 'Uncategorized' else current_label_name }}</div>
                             <div class="category-items">
-                            {% set _ = last_label.clear() or last_label.append(item.label.name if item.label else 'Uncategorized') %}
+                            {% set ns.last_label = current_label_name %}
                         {% endif %}
+
                         <div class="shopping-item">
+
                             <input type="checkbox" class="item-checkbox shopping-list-checkbox" data-id="{{ item.id }}" {% if item.checked %}checked{% endif %}>
                             <div class="item-text {% if item.checked %}checked{% endif %}">
                                 {% if item.quantity and item.quantity > 0 %}

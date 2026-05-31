@@ -14,7 +14,6 @@ This skill takes the raw ingredient strings from dinner recipes, a list of house
     - `inventory_items`: A list of specific items the user wants to "use up" from their freezer/pantry/fridge (e.g. `["1 lb chicken thighs", "pesto sauce"]`).
     - `low_staples`: A list of staple names that are currently running low and MUST be added (e.g. `["garlic"]`).
 - `family_dietary_rules`: The family-specific dietary rules and preferences (which includes the "Dirty Dozen" list).
-- `available_labels`: A list of actual category labels from the user's Mealie instance (e.g. `["1. Produce", "Poultry", "Dairy & Eggs"]`).
 
 ## Workflow
 
@@ -45,20 +44,12 @@ This skill takes the raw ingredient strings from dinner recipes, a list of house
 5.  **Include Manually Added Low Staples:**
     - Ensure any item from `low_staples` that was marked as low is included in the output list with `unit: null`.
 
-6.  **Categorize Using Available Labels:**
-    - For each item, select the most semantically relevant category from the provided `available_labels` list.
-    - **Physical Layout Logic:** Use the names of the labels (which may include numbers or store aisle names) to determine the best fit. 
-    - If a label matches exactly or is a very strong semantic fit (e.g. "Chicken" -> "Poultry"), use that label.
-    - If no provided label is a good fit, set `category` to `null`.
-    - Within the output JSON, group items by the selected `category` name and sort items alphabetically within those groups.
-
-7.  **Construct Output:**
+6.  **Construct Output:**
     - Return a JSON array of objects representing the final shopping list items.
     - Each object must have:
       - `name`: Cleaned, Title Cased ingredient name (e.g. "Chicken Breast").
       - `quantity`: Aggregated numeric quantity as a float (e.g. 1.0 or 2.0).
       - `unit`: The extracted unit of measure (e.g. "lb", "cup", "can", "clove", "tsp", "tbsp"). For staples, this MUST be `null`.
-      - `category`: The EXACT name of the selected label from `available_labels`, or `null`.
     - Do not include any extra text or conversational response.
 
 ## Example Input
@@ -66,8 +57,7 @@ This skill takes the raw ingredient strings from dinner recipes, a list of house
 {
   "ingredients": ["2 lbs chicken breast", "1/2 cup salt", "3 cloves garlic", "2 cups water", "1 can coconut water", "1/2 tsp fresh ginger (, minced or finely chopped)"],
   "staples": ["salt", "pepper", "garlic", "olive oil"],
-  "low_staples": ["garlic"],
-  "available_labels": ["1. Produce", "Meat", "Dairy", "Beverages"]
+  "low_staples": ["garlic"]
 }
 ```
 
@@ -77,26 +67,22 @@ This skill takes the raw ingredient strings from dinner recipes, a list of house
   {
     "name": "Fresh Ginger",
     "quantity": 0.5,
-    "unit": "tsp",
-    "category": "1. Produce"
+    "unit": "tsp"
   },
   {
     "name": "Garlic",
     "quantity": 3.0,
-    "unit": null,
-    "category": "1. Produce"
+    "unit": null
   },
   {
     "name": "Chicken Breast",
     "quantity": 2.0,
-    "unit": "lbs",
-    "category": "Meat"
+    "unit": "lbs"
   },
   {
     "name": "Coconut Water",
     "quantity": 1.0,
-    "unit": "can",
-    "category": "Beverages"
+    "unit": "can"
   }
 ]
 ```

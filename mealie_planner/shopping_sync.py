@@ -85,16 +85,11 @@ class ShoppingListSync:
             if progress_callback:
                 progress_callback("Generating final shopping list using AI...", 96)
             
-            # Fetch actual labels from Mealie
-            all_labels = self.client.get_labels()
-            available_label_names = [label['name'] for label in all_labels]
-
             payload = {
                 "ingredients": raw_recipe_ingredients,
                 "staples": staples_notes,
                 "inventory_items": inventory_items,
-                "low_staples": low_staples_notes,
-                "available_labels": available_label_names
+                "low_staples": low_staples_notes
             }
             
             prompt = (
@@ -120,7 +115,25 @@ class ShoppingListSync:
             except Exception as e:
                 raise SkillParsingError(f"Failed to parse AI response: {e}")
 
-            # 4. Write to Mealie
+            # 4. Official Mealie Categorization (Mirror Mealie)
+            if progress_callback:
+                progress_callback("Categorizing items according to Mealie...", 97)
+            
+            # Extract names to batch-parse them for official labels
+            cleaned_names = [item.get('name', 'Unknown Item') for item in final_items]
+            official_parsed = self.client.parse_raw_ingredients(cleaned_names)
+            
+            # Map the official Mealie label back to our final items
+            for idx, item in enumerate(final_items):
+                if idx < len(official_parsed):
+                    # official_parsed is a list of ingredient objects
+                    # We want the labelId from the food object if it exists
+                    parsed_ing = official_parsed[idx]
+                    food = parsed_ing.get('food')
+                    if food and food.get('labelId'):
+                        item['labelId'] = food['labelId']
+
+            # 5. Write to Mealie
             if progress_callback:
                 progress_callback("Writing items to Mealie shopping list...", 98)
             
@@ -128,9 +141,6 @@ class ShoppingListSync:
             
             self.client.clear_shopping_list(ACTIVE_LIST_ID)
             
-            # Map for quick label ID lookup
-            label_name_to_id = {label['name']: label['id'] for label in all_labels}
-
             ingredients_list = []
             for idx, item in enumerate(final_items):
                 name = item.get('name', 'Unknown Item')
@@ -138,9 +148,7 @@ class ShoppingListSync:
                 unit = item.get('unit') or ''
                 unit = unit.strip()
                 
-                # AI now returns the actual label name from our available_labels list
-                category_name = item.get('category')
-                label_id = label_name_to_id.get(category_name) if category_name else None
+                label_id = item.get('labelId')
                 
                 # For ingredients, include the unit in the note (e.g. "1 lb Chicken Breast")
                 full_note = f"{unit} {name}".strip() if unit else name

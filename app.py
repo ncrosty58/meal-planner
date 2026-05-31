@@ -132,11 +132,12 @@ def index():
         try:
             shopping_list = client.get_shopping_list_items_for_list(ACTIVE_LIST_ID)
             # Sort by label name first (to group them for the UI), then by position
-            shopping_list.sort(key=lambda x: (
-                (x.get('label', {}) or {}).get('name') or 'ZZZ', # Put uncategorized at bottom
-                x.get('position', 0),
-                x.get('note', '')
-            ))
+            def get_sort_key(item):
+                label = item.get('label')
+                name = label.get('name') if isinstance(label, dict) else None
+                return (name or 'ZZZ', item.get('position', 0), item.get('note', ''))
+            
+            shopping_list.sort(key=get_sort_key)
         except Exception as e:
             print(f"Error reading active shopping list: {e}")
 
