@@ -3,7 +3,7 @@ import sys
 import queue
 import threading
 import json
-from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_from_directory, make_response
 from datetime import datetime, timedelta
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -59,11 +59,18 @@ def favicon():
 
 @app.route('/sw.js')
 def sw():
-    return send_from_directory('static', 'sw.js', mimetype='application/javascript')
+    response = make_response(send_from_directory('static', 'sw.js'))
+    response.headers['Content-Type'] = 'application/javascript'
+    response.headers['Service-Worker-Allowed'] = '/'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
 
 @app.route('/manifest.json')
 def manifest():
-    return send_from_directory('static', 'manifest.json', mimetype='application/manifest+json')
+    response = make_response(send_from_directory('static', 'manifest.json'))
+    response.headers['Content-Type'] = 'application/manifest+json'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
 
 @app.route('/')
 def index():
