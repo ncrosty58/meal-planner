@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mealie-planner-v14';
+const CACHE_NAME = 'mealie-planner-v15';
 const ASSETS_TO_CACHE = [
   '/',
   '/static/favicon.svg'
