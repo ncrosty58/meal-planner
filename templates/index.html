@@ -467,7 +467,7 @@
             padding: 1rem;
             background: rgba(10, 15, 25, 0.4);
             border: 1px dashed rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
+            border-radius: 4px;
             margin-top: 0.5rem;
         }
         
@@ -809,10 +809,6 @@
                         <div>
                             <div class="control-group-label">Shopping & Inventory</div>
                             <div class="control-group-buttons">
-                                <form action="{{ url_for('sync') }}" method="POST" id="sync-list-form">
-                                    <button type="submit" class="btn btn-secondary">🔄 Update Shopping List</button>
-                                </form>
-                                
                                 <a href="{{ mealie_url }}/shopping-lists/{{ active_list_id }}" target="_blank" class="btn btn-primary" style="background: linear-gradient(135deg, var(--color-success) 0%, #059669 100%); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">🛒 Open Shopping List</a>
 
                                 <button type="button" class="btn btn-secondary" onclick="openStaplesModal()">📋 Manage Staples</button>
@@ -828,12 +824,18 @@
                         </div>
                     </div>
 
-                    <!-- Group 3: Danger Zone -->
+                    <!-- Group 3: Maintenance & Destructive Actions -->
                     <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(239, 68, 68, 0.1);">
-                        <div class="control-group-label" style="color: var(--color-danger);">Danger Zone</div>
-                        <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('ARE YOU SURE? This will delete all current and next week meal plans and clear the active shopping list.');">
-                            <button type="submit" class="btn btn-danger" style="width: auto; min-width: 180px;">🗑️ Clear & Reset Plan</button>
-                        </form>
+                        <div class="control-group-label" style="color: var(--color-danger);">Maintenance & Destructive Actions</div>
+                        <div class="control-group-buttons" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                            <form action="{{ url_for('sync') }}" method="POST" id="sync-list-form">
+                                <button type="submit" class="btn btn-secondary" style="border-color: rgba(239, 68, 68, 0.2);">🔄 Update Shopping List</button>
+                            </form>
+                            
+                            <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('ARE YOU SURE? This will delete all current and next week meal plans and clear the active shopping list.');">
+                                <button type="submit" class="btn btn-danger">🗑️ Clear & Reset Plan</button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1094,3 +1096,4 @@
     </script>
 </body>
 </html>
+html>
