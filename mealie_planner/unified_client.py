@@ -243,3 +243,46 @@ class UnifiedMealieClient(MealieFetcher):
         except Exception as e:
             logger.error(f"Error parsing ingredients with AI: {e}")
             raise
+
+    def standardize_ingredients_with_ai(self, ingredients: List[str]) -> List[str]:
+        """
+        Use Gemini to clean and standardize a list of ingredient strings.
+        Removes brand names, extraneous instructions, and formatting noise.
+        """
+        import httpx
+        try:
+            raw_text = "\n".join(ingredients)
+            logger.info({"message": "Standardizing ingredients via Gemini AI", "count": len(ingredients)})
+            
+            prompt = f"""You are a master chef. Clean and standardize the following list of ingredients.
+For each ingredient:
+1. Remove brand names (e.g. 'Success®', 'Heinen's').
+2. Keep the quantity and unit.
+3. Remove parenthetical instructions or secondary preparation details (e.g. 'minced', 'finely chopped').
+4. Return a clean, simple string like '2 lbs Chicken Breast' or '1 cup White Rice'.
+
+### INPUT LIST:
+{raw_text}
+
+Return ONLY a JSON array of strings."""
+
+            api_key = os.getenv("GOOGLE_API_KEY")
+            model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.1,
+                    "responseMimeType": "application/json"
+                }
+            }
+
+            resp = httpx.post(url, json=payload, timeout=30.0)
+            resp.raise_for_status()
+            data = resp.json()
+            text = data["candidates"][0]["content"]["parts"][0]["text"]
+            return json.loads(text)
+        except Exception as e:
+            logger.error(f"Error standardizing ingredients with AI: {e}")
+            return ingredients
