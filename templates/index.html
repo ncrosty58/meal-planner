@@ -863,11 +863,12 @@
                             {% set dinner_entry = [] %}
                             
                             {% for item in meal_plans %}
-                                {% if item.date == d_str %}
+                                {# Robust date comparison (handles both YYYY-MM-DD and ISO timestamps) #}
+                                {% if item.date[:10] == d_str %}
                                     {% if item.entryType == 'breakfast' %}
-                                        {% set _ = meals.update({'breakfast': item.title}) %}
+                                        {% set _ = meals.update({'breakfast': item.title or 'Planned Breakfast'}) %}
                                     {% elif item.entryType == 'lunch' %}
-                                        {% set _ = meals.update({'lunch': item.title}) %}
+                                        {% set _ = meals.update({'lunch': item.title or 'Planned Lunch'}) %}
                                     {% elif item.entryType == 'dinner' %}
                                         {% set _ = dinner_entry.append(item) %}
                                         {% if item.recipeId %}

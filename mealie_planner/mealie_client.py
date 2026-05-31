@@ -94,9 +94,20 @@ class MealieClient:
 
     def get_meal_plan(self, start_date, end_date):
         """Fetch scheduled meal plans for a date range."""
-        r = requests.get(f"{self.api_url}/api/households/mealplans?startDate={start_date}&endDate={end_date}", headers=self.headers)
+        # Use both sets of params for compatibility across Mealie versions
+        params = {
+            "start": start_date,
+            "end": end_date,
+            "startDate": start_date,
+            "endDate": end_date,
+            "perPage": 100 # Ensure we get all items
+        }
+        r = requests.get(f"{self.api_url}/api/households/mealplans", params=params, headers=self.headers)
         r.raise_for_status()
-        return r.json().get('items', [])
+        data = r.json()
+        if isinstance(data, dict):
+            return data.get('items', [])
+        return data  # Assume it's a list already
 
     def schedule_meal(self, date_str, entry_type, title="", text="", recipe_id=None):
         """Schedule a meal plan entry."""

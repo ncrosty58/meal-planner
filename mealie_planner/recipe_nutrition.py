@@ -115,7 +115,8 @@ class RecipeNutrition:
         }
 
         for item in meal_plans:
-            d_str = item['date']
+            # Normalize date to YYYY-MM-DD
+            d_str = item['date'][:10]
             if d_str not in daily_nutrients:
                 continue
                 

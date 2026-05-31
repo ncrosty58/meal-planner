@@ -81,13 +81,17 @@ def index():
 
     # 1. Determine if a meal plan is already active for the upcoming/current week
     start_date_str, end_date_str = get_planning_dates()
-    raw_plans = client.get_meal_plan(start_date_str, end_date_str)
+    meal_plans = client.get_meal_plan(start_date_str, end_date_str)
     
-    # Handle both list and dict responses from Mealie
-    meal_plans = raw_plans.get('items', []) if isinstance(raw_plans, dict) else raw_plans
+    # Check if there are scheduled dinner entries (recipes or text notes)
+    # This detects if we are in Dashboard state
+    dinners = [p for p in meal_plans if p['entryType'] == 'dinner' and (p.get('recipeId') or p.get('title') or p.get('text'))]
     
-    # Check if there are scheduled dinner recipes in the database
-    dinners = [p for p in meal_plans if p['entryType'] == 'dinner' and (p.get('recipeId') or p.get('title') == 'Eating Out')]
+    print(f"[Debug] Planning range: {start_date_str} to {end_date_str}")
+    print(f"[Debug] Total plans found: {len(meal_plans)}")
+    print(f"[Debug] Dinners found: {len(dinners)}")
+    if dinners:
+        print(f"[Debug] First dinner: {dinners[0]}")
     
     # 2. Get staples list items for the form (or dashboard)
     staples = []
