@@ -86,15 +86,21 @@
 
         .hamburger-btn {
             display: none;
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.08);
             border: 1px solid var(--border-glow);
             color: var(--text-main);
-            font-size: 1.5rem;
-            padding: 0.5rem 0.75rem;
+            font-size: 1.8rem;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             border-radius: 4px;
             cursor: pointer;
             z-index: 1010;
             transition: all 0.2s;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
         @media (max-width: 968px) {
@@ -103,13 +109,14 @@
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 0.5rem;
-                padding-right: 60px; /* Make room for the button */
+                padding-right: 60px;
             }
             .hamburger-btn {
-                display: block;
+                display: flex;
                 position: fixed;
-                top: 2rem;
-                right: 1rem;
+                top: 1.5rem;
+                right: 1.5rem;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
             }
         }
 
@@ -121,10 +128,10 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-            z-index: 999;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 1000;
             opacity: 0;
             transition: opacity 0.3s ease;
         }
@@ -136,7 +143,7 @@
 
         /* Side Drawer Wrapper */
         .side-drawer {
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         @media (max-width: 968px) {
@@ -144,11 +151,11 @@
                 position: fixed;
                 top: 0;
                 right: -100%;
-                width: 85%;
+                width: 88%;
                 max-width: 400px;
                 height: 100vh;
-                background: #0B0F19; /* Solid background for mobile menu */
-                z-index: 1000;
+                background: #0B0F19;
+                z-index: 1005;
                 overflow-y: auto;
                 padding: 5rem 1.5rem 2rem 1.5rem;
                 box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
@@ -777,7 +784,7 @@
 </head>
 <body>
     <div class="container">
-        <div id="drawer-overlay" class="drawer-overlay"></div>
+        <div id="drawer-overlay" class="drawer-overlay" onclick="toggleDrawer(event)"></div>
         
         <!-- Header -->
         <header>
@@ -788,7 +795,7 @@
                 {% endif %}
             </div>
             {% if is_submitted %}
-                <button type="button" class="hamburger-btn" id="drawer-toggle">☰</button>
+                <button type="button" class="hamburger-btn" id="drawer-toggle" onclick="toggleDrawer(event)">☰</button>
             {% endif %}
         </header>
 
@@ -918,7 +925,7 @@
 
             <!-- Column 2: Secondary Content / Mobile Drawer (Controls, Nutrition, & LIVE Shopping List) -->
             <aside id="side-drawer" class="side-drawer">
-                <span class="drawer-close" id="drawer-close">&times;</span>
+                <span class="drawer-close" id="drawer-close" onclick="toggleDrawer(event)">&times;</span>
 
                 <!-- Planner Controls Card -->
                 <div class="card">
@@ -1072,205 +1079,41 @@
     </div>
 
     <script>
-        // Drawer Toggle Logic
-        document.addEventListener('DOMContentLoaded', function() {
-            const drawerToggle = document.getElementById('drawer-toggle');
-            const drawerClose = document.getElementById('drawer-close');
+        // --- UI UTILITIES ---
+        
+        function toggleDrawer(e) {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
             const sideDrawer = document.getElementById('side-drawer');
             const drawerOverlay = document.getElementById('drawer-overlay');
-
-            if (drawerToggle && sideDrawer && drawerOverlay) {
-                const toggleDrawer = (e) => {
-                    if (e) e.preventDefault();
-                    sideDrawer.classList.toggle('active');
-                    drawerOverlay.classList.toggle('active');
-                    document.body.style.overflow = sideDrawer.classList.contains('active') ? 'hidden' : '';
-                };
-
-                drawerToggle.addEventListener('click', toggleDrawer);
-                if (drawerClose) drawerClose.addEventListener('click', toggleDrawer);
-                drawerOverlay.addEventListener('click', toggleDrawer);
+            const drawerToggle = document.getElementById('drawer-toggle');
+            
+            if (sideDrawer && drawerOverlay) {
+                console.log('☰ Toggling Drawer');
+                sideDrawer.classList.toggle('active');
+                drawerOverlay.classList.toggle('active');
+                if (drawerToggle) drawerToggle.classList.toggle('active');
+                document.body.style.overflow = sideDrawer.classList.contains('active') ? 'hidden' : '';
             }
-
-            // Live Shopping List Interactivity
-            const shoppingCheckboxes = document.querySelectorAll('.shopping-list-checkbox');
-            shoppingCheckboxes.forEach(checkbox => {
-                checkbox.addEventListener('change', async function() {
-                    const itemId = this.getAttribute('data-id');
-                    const isChecked = this.checked;
-                    const textSpan = this.nextElementSibling;
-
-                    // Immediate visual feedback
-                    if (isChecked) {
-                        textSpan.classList.add('checked-item');
-                    } else {
-                        textSpan.classList.remove('checked-item');
-                    }
-
-                    try {
-                        const response = await fetch('/toggle-shopping-item', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ item_id: itemId, checked: isChecked })
-                        });
-                        const result = await response.json();
-                        if (!result.success) {
-                            throw new Error(result.error || 'Failed to update Mealie');
-                        }
-                    } catch (error) {
-                        console.error('Error updating shopping list item:', error);
-                        // Revert on error
-                        this.checked = !isChecked;
-                        if (this.checked) {
-                            textSpan.classList.add('checked-item');
-                        } else {
-                            textSpan.classList.remove('checked-item');
-                        }
-                        alert('Error updating shopping list in Mealie. Please refresh.');
-                    }
-                });
-            });
-        });
+        }
 
         function openStaplesModal() {
-            document.getElementById('staples-modal').style.display = 'flex';
-        }
-    ...
-        function closeStaplesModal() {
-            document.getElementById('staples-modal').style.display = 'none';
-        }
+...
+                const sideDrawer = document.getElementById('side-drawer');
+                const drawerOverlay = document.getElementById('drawer-overlay');
 
-        window.addEventListener('click', function(event) {
-            const modal = document.getElementById('staples-modal');
-            if (event.target === modal) {
-                closeStaplesModal();
+                if (drawerToggle && sideDrawer && drawerOverlay) {
+                    console.log('✅ Drawer elements initialized.');
+                    drawerToggle.addEventListener('click', toggleDrawer);
+                    if (drawerClose) drawerClose.addEventListener('click', toggleDrawer);
+                    drawerOverlay.addEventListener('click', toggleDrawer);
+                }
+            } catch (err) {
+                console.error('Initialization error:', err);
             }
         });
-        function showLoading(text) {
-            document.getElementById('loading-text').innerText = text;
-            
-            // Hide progress elements for standard spinner actions
-            const barContainer = document.getElementById('progress-bar-container');
-            const logEl = document.getElementById('loading-log');
-            if (barContainer) barContainer.style.display = 'none';
-            if (logEl) logEl.style.display = 'none';
-            
-            document.getElementById('loading-overlay').style.display = 'flex';
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            // 1. Dinner recipe dropdown change event
-            const recipeSelects = document.querySelectorAll('.select-recipe');
-            recipeSelects.forEach(function(select) {
-                select.addEventListener('change', function() {
-                    if (this.value) {
-                        showLoading('Updating Dinner & List...');
-                    }
-                });
-            });
-
-            // 2. Sync Shopping List (Update) button submit
-            const syncListForm = document.getElementById('sync-list-form');
-            if (syncListForm) {
-                syncListForm.addEventListener('submit', function() {
-                    showLoading('Updating Shopping List...');
-                });
-            }
-
-            // Staples checklist form submit
-            const staplesForm = document.getElementById('staples-form');
-            if (staplesForm) {
-                staplesForm.addEventListener('submit', function() {
-                    showLoading('Adding Staples to Shopping List...');
-                });
-            }
-
-            // 3. Main plan generation form submit
-            const planForms = document.querySelectorAll('form[action*="/plan"]');
-            planForms.forEach(function(form) {
-                form.addEventListener('submit', function(e) {
-                    // Check if it's the main generation form
-                    if (form.method.toLowerCase() === 'post') {
-                        e.preventDefault(); // Intercept form submission
-                        
-                        // Collect form data
-                        const formData = new FormData(form);
-                        const params = new URLSearchParams();
-                        
-                        for (const pair of formData.entries()) {
-                            params.append(pair[0], pair[1]);
-                        }
-                        
-                        // Get overlay elements
-                        const logEl = document.getElementById('loading-log');
-                        const barEl = document.getElementById('progress-bar-fill');
-                        const textEl = document.getElementById('loading-text');
-                        const subtextEl = document.getElementById('loading-subtext');
-                        const barContainer = document.getElementById('progress-bar-container');
-                        
-                        // Reset & Show loading overlay with progress options
-                        if (textEl) textEl.innerText = 'Generating Weekly Plan...';
-                        if (subtextEl) subtextEl.innerText = 'Analyzing inputs and initiating generator...';
-                        if (logEl) {
-                            logEl.innerHTML = '';
-                            logEl.style.display = 'block';
-                        }
-                        if (barContainer) {
-                            barContainer.style.display = 'block';
-                        }
-                        if (barEl) {
-                            barEl.style.width = '0%';
-                        }
-                        
-                        document.getElementById('loading-overlay').style.display = 'flex';
-                        
-                        // Start EventSource
-                        const eventSource = new EventSource('/plan-stream?' + params.toString());
-                        
-                        eventSource.onmessage = function(event) {
-                            const data = JSON.parse(event.data);
-                            
-                            if (data.status === 'complete') {
-                                eventSource.close();
-                                window.location.href = '/?success_msg=Successfully generated weekly plan and updated active shopping list!';
-                            } else if (data.status === 'error' || data.status.startsWith('Error:')) {
-                                eventSource.close();
-                                document.getElementById('loading-overlay').style.display = 'none';
-                                alert('Error: ' + (data.message || data.status));
-                            } else {
-                                if (subtextEl) subtextEl.innerText = data.status;
-                                if (barEl) barEl.style.width = data.progress + '%';
-                                if (logEl) {
-                                    const timestamp = new Date().toLocaleTimeString();
-                                    logEl.innerHTML += `[${timestamp}] ${data.status}\n`;
-                                    logEl.scrollTop = logEl.scrollHeight; // Auto-scroll
-                                }
-                            }
-                        };
-                        
-                        eventSource.onerror = function() {
-                            eventSource.close();
-                            document.getElementById('loading-overlay').style.display = 'none';
-                            alert('An error occurred during communication with the server.');
-                        };
-                    }
-                });
-            });
-        });
-    </script>
-    <script>
-        // PWA Service Worker Registration
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(registration => {
-                        console.log('SW registered: ', registration);
-                    })
-                    .catch(registrationError => {
-                        console.log('SW registration failed: ', registrationError);
-                    });
-            });
-        }
     </script>
 </body>
 </html>
