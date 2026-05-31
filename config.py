@@ -133,6 +133,8 @@ def get_banned_recipes():
         if line.startswith('- ') or line.startswith('* '):
             # Extract recipe name up to the colon (if present) or just the whole line
             name = line[2:].split(':', 1)[0].strip()
+            # Strip markdown formatting asterisks
+            name = name.replace('**', '').replace('*', '').strip()
             if name:
                 banned.append(name)
     return banned
