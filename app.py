@@ -355,6 +355,112 @@ def change_meal():
         
     return redirect(url_for('index'))
 
+@app.route('/get-swap-recommendations')
+def get_swap_recommendations():
+    date_str = request.args.get('date')
+    if not date_str:
+        return Response(json.dumps([]), mimetype='application/json')
+        
+    client = UnifiedMealieClient()
+    gemini = GeminiClient()
+    
+    try:
+        # 1. Fetch current week's scheduled meals and recipes
+        active_start_str, active_end_str = get_active_week_strings()
+        meal_plans = client.get_meal_plan(active_start_str, active_end_str)
+        
+        # Extract the other dinners planned this week (excluding the target date we are swapping)
+        other_dinners = []
+        target_dinner_name = ""
+        for p in meal_plans:
+            if p['entryType'] == 'dinner':
+                if p['date'][:10] == date_str:
+                    if p.get('recipe'):
+                        target_dinner_name = p['recipe']['name']
+                else:
+                    if p.get('recipe'):
+                        other_dinners.append(p['recipe'])
+                        
+        # 2. Get all recipes from the database
+        all_recipes = client.get_all_recipes()
+        
+        # Compile list of other dinner names/ingredients for context
+        other_dinner_context = []
+        for r in other_dinners:
+            # Fetch details to get ingredients
+            try:
+                det = client.get_recipe_details(r['id'])
+                ingredients = []
+                for ing in det.get('recipeIngredient', []):
+                    ing_text = ing.get('display') or ing.get('originalText')
+                    if not ing_text:
+                        note = ing.get('note') or ""
+                        food_name = ing.get('food', {}).get('name') if ing.get('food') else ""
+                        quantity = ing.get('quantity') or ""
+                        unit = ing.get('unit', {}).get('name') if ing.get('unit') else ""
+                        ing_text = f"{quantity} {unit} {food_name} {note}".strip()
+                    if ing_text:
+                        ingredients.append(ing_text)
+                other_dinner_context.append({
+                    "name": r['name'],
+                    "ingredients": ingredients
+                })
+            except Exception as context_err:
+                print(f"[Swap Recs] Error loading context details for {r['name']}: {context_err}")
+                other_dinner_context.append({"name": r['name'], "ingredients": []})
+                
+        # Compile candidate recipes (excluding the ones already planned and the target one)
+        planned_names = {r['name'].lower() for r in other_dinners}
+        if target_dinner_name:
+            planned_names.add(target_dinner_name.lower())
+            
+        candidates = []
+        for r in all_recipes:
+            if r['name'].lower() not in planned_names:
+                candidates.append({
+                    "id": r['id'],
+                    "name": r['name'],
+                    "description": (r.get("description") or "")[:120],
+                    "tags": [t.get('name', t) if isinstance(t, dict) else t for t in r.get('tags', [])]
+                })
+                
+        # Limit to 35 candidates to avoid exceeding Gemini context constraints
+        import random
+        if len(candidates) > 35:
+            candidates = random.sample(candidates, 35)
+                
+        prompt = f"""You are a culinary planner. Suggest exactly 3 candidate recipes from the catalogue to replace the dinner on {date_str} (currently: "{target_dinner_name or 'None'}").
+        
+The goal is to suggest recipes that share matching ingredients or culinary styles with the other dinners planned for this week to minimize grocery waste.
+
+Other Dinners Planned This Week:
+{json.dumps(other_dinner_context, indent=2)}
+
+Candidate Recipe Catalogue:
+{json.dumps(candidates, indent=2)}
+
+Respond with a JSON array containing exactly 3 objects, each having "id" and "name". Respond with ONLY the JSON array."""
+
+        raw = gemini.call(prompt, expect_json=True)
+        result = json.loads(raw)
+        
+        # Verify result is a list
+        if not isinstance(result, list):
+            raise ValueError("AI response is not a list")
+            
+        return Response(json.dumps(result[:3]), mimetype='application/json')
+    except Exception as e:
+        print(f"Error getting swap recommendations: {e}")
+        # Fallback to random 3 recipes from database
+        import random
+        try:
+            all_recipes = client.get_all_recipes()
+            fallback = [{"id": r["id"], "name": r["name"]} for r in random.sample(all_recipes, min(3, len(all_recipes)))]
+            return Response(json.dumps(fallback), mimetype='application/json')
+        except Exception as fallback_err:
+            print(f"Fallback recipe selection failed: {fallback_err}")
+            return Response(json.dumps([]), mimetype='application/json')
+
 @app.route('/chat', methods=['POST'])
 def chat():
     from mealie_planner.mcp_agent import run_mcp_chat

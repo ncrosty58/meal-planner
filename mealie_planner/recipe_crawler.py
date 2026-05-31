@@ -15,32 +15,7 @@ class RecipeCrawler:
 
     def check_blackstone_compatibility(self, recipe_details):
         """Analyze recipe details using Gemini semantic reasoning to check flat top griddle compatibility."""
-        if not recipe_details:
-            return False
-            
-        name = recipe_details.get('name', '')
-        instructions = [i.get('text', '') for i in recipe_details.get('recipeInstructions', []) if i.get('text')]
-        
-        # Fast-Path: Keyword match to save API latency
-        name_lower = name.lower()
-        instructions_text = " ".join(instructions).lower()
-        if 'blackstone' in name_lower or 'griddle' in name_lower or 'blackstone' in instructions_text or 'griddle' in instructions_text:
-            return True
-            
-        # Semantic Path: Let Gemini evaluate if the style/technique fits flat top griddling
-        prompt = f"""You are an expert griddle chef. Analyze if the following recipe can or should be cooked on an outdoor flat top griddle/Blackstone (e.g. stir-fries, smashed burgers, seared steaks, fajitas, pancakes, fried rice, street tacos).
-
-Recipe Name: {name}
-Instructions:
-{" ".join(instructions)}
-
-Respond with ONLY 'YES' or 'NO'."""
-        try:
-            response = self.gemini.call(prompt, expect_json=False)
-            return 'YES' in response.upper()
-        except Exception as e:
-            print(f"[Crawler] Blackstone griddle AI check failed, falling back: {e}")
-            return False
+        return check_blackstone_compatibility(recipe_details)
 
     def get_recipes_from_db(self):
         """Fetch all current recipes from the Mealie DB."""
@@ -64,17 +39,26 @@ Respond with ONLY 'YES' or 'NO'."""
                 return r['id']
 
         # 3. Semantic Path: Ask Gemini to resolve the closest culinary match
-        catalogue = [{"id": r["id"], "name": r["name"]} for r in all_recipes]
-        prompt = f"""You are a culinary search engine. Match the meal plan title to the single most relevant recipe ID from the catalogue.
+        catalogue = [
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "description": (r.get("description") or "")[:150],
+                "tags": [t.get('name', t) if isinstance(t, dict) else t for t in r.get('tags', [])]
+            }
+            for r in all_recipes
+        ]
+        prompt = f"""You are a culinary search engine. Match the meal plan title or prioritized ingredient to the single most relevant recipe ID from the catalogue.
 
-Meal Plan Title: {ingredient_name}
+Target Culinary/Ingredient Term: {ingredient_name}
 
 Recipe Catalogue:
 {json.dumps(catalogue, indent=2)}
 
 Guidelines:
 - Match semantically (e.g. "Fish Tacos" matches "Cod Tacos", "Burgers" matches "Smashed Burgers").
-- If no recipe is a good culinary match, respond with 'NONE'.
+- Match ingredients to recipe types (e.g., "cod" or "tilapia" should match "Fish Tacos" or "Pan-seared Salmon", "chicken" should match "Skillet Chicken Thighs").
+- If no recipe is a good culinary match or utilizes the ingredient, respond with 'NONE'.
 - Respond with ONLY the matched recipe ID/UUID or 'NONE'."""
         try:
             response = self.gemini.call(prompt, expect_json=False).strip()
@@ -182,11 +166,32 @@ Guidelines:
         return False
 
 def check_blackstone_compatibility(recipe_details):
-    """Standalone utility to check Blackstone compatibility using a quick keyword check."""
+    """Standalone utility to check Blackstone compatibility using keyword check and AI fallback."""
     if not recipe_details:
         return False
     name_lower = recipe_details.get('name', '').lower()
     instructions = recipe_details.get('recipeInstructions', [])
     instructions_text = " ".join([i.get('text', '').lower() for i in instructions if i.get('text')]).lower()
     
-    return 'blackstone' in name_lower or 'griddle' in name_lower or 'blackstone' in instructions_text or 'griddle' in instructions_text
+    # Fast path
+    if 'blackstone' in name_lower or 'griddle' in name_lower or 'blackstone' in instructions_text or 'griddle' in instructions_text:
+        return True
+        
+    # AI Fallback
+    name = recipe_details.get('name', '')
+    instructions_list = [i.get('text', '') for i in instructions if i.get('text')]
+    prompt = f"""You are an expert griddle chef. Analyze if the following recipe can or should be cooked on an outdoor flat top griddle/Blackstone (e.g. stir-fries, smashed burgers, seared steaks, fajitas, pancakes, fried rice, street tacos).
+
+Recipe Name: {name}
+Instructions:
+{" ".join(instructions_list)}
+
+Respond with ONLY 'YES' or 'NO'."""
+    try:
+        from .gemini_client import GeminiClient
+        gemini = GeminiClient()
+        response = gemini.call(prompt, expect_json=False)
+        return 'YES' in response.upper()
+    except Exception as e:
+        print(f"[Crawler] Standalone Blackstone griddle AI check failed, falling back: {e}")
+        return False

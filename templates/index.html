@@ -424,10 +424,14 @@
                                 <form action="{{ url_for('change_meal') }}" method="POST">
                                     <input type="hidden" name="date" value="{{ d_str }}">
                                     <input type="hidden" name="entry_id" value="{{ dinner_entry[0].id if dinner_entry else '' }}">
-                                    <select name="recipe_id" class="select-recipe" onchange="this.form.submit()">
+                                    <select name="recipe_id" class="select-recipe" data-date="{{ d_str }}" onclick="loadSwapRecommendations(this)" onchange="this.form.submit()">
                                         <option value="">Swap Dinner...</option>
                                         <option value="SKIP">🚫 Eating Out</option>
-                                        {% for rec in all_recipes %}<option value="{{ rec.id }}">{{ rec.name }}</option>{% endfor %}
+                                        <optgroup class="ai-recs-group" label="💡 AI Recommended (Loading...)" style="display: none;">
+                                        </optgroup>
+                                        <optgroup label="All Recipes">
+                                            {% for rec in all_recipes %}<option value="{{ rec.id }}">{{ rec.name }}</option>{% endfor %}
+                                        </optgroup>
                                     </select>
                                 </form>
                             {% endif %}</div>
@@ -655,6 +659,39 @@
             if (!val) return;
             const res = await fetch('/add-shopping-item', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({note: val}) });
             if (res.ok) window.location.reload();
+        }
+
+        async function loadSwapRecommendations(selectEl) {
+            if (selectEl.dataset.loaded) return;
+            selectEl.dataset.loaded = "true";
+            
+            const date = selectEl.dataset.date;
+            const recsGroup = selectEl.querySelector('.ai-recs-group');
+            recsGroup.style.display = 'block';
+            
+            try {
+                const res = await fetch(`/get-swap-recommendations?date=${date}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    recsGroup.innerHTML = '';
+                    if (data && data.length > 0) {
+                        recsGroup.label = '💡 AI Recommended Substitutes';
+                        data.forEach(rec => {
+                            const opt = document.createElement('option');
+                            opt.value = rec.id;
+                            opt.textContent = rec.name;
+                            recsGroup.appendChild(opt);
+                        });
+                    } else {
+                        recsGroup.style.display = 'none';
+                    }
+                } else {
+                    recsGroup.style.display = 'none';
+                }
+            } catch (err) {
+                console.error("Error loading swap recommendations", err);
+                recsGroup.style.display = 'none';
+            }
         }
 
         function showLoading(msg, sub='') {
