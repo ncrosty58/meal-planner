@@ -540,22 +540,31 @@
         }
 
         /* Planner Controls */
-        .planner-controls-container {
+        .controls-grid {
             display: flex;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-            align-items: center;
+            flex-direction: column;
+            gap: 1.5rem;
         }
 
-        @media (max-width: 768px) {
-            .planner-controls-container {
-                flex-direction: column;
-            }
-            .planner-controls-container > *,
-            .planner-controls-container form,
-            .planner-controls-container .btn {
-                width: 100%;
-            }
+        .control-group-label {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .control-group-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .control-group-buttons > *, 
+        .control-group-buttons form, 
+        .control-group-buttons .btn {
+            width: 100%;
         }
 
         /* Shopping List View */
@@ -795,22 +804,35 @@
                     <div class="card-title">
                         ⚙️ Planner Controls
                     </div>
-                    <div class="planner-controls-container">
-                        <button type="button" class="btn btn-secondary" onclick="openStaplesModal()">📋 Manage Staples</button>
+                    <div class="controls-grid">
+                        <!-- Group 1: Shopping & Inventory -->
+                        <div>
+                            <div class="control-group-label">Shopping & Inventory</div>
+                            <div class="control-group-buttons">
+                                <form action="{{ url_for('sync') }}" method="POST" id="sync-list-form">
+                                    <button type="submit" class="btn btn-secondary">🔄 Update Shopping List</button>
+                                </form>
+                                
+                                <a href="{{ mealie_url }}/shopping-lists/{{ active_list_id }}" target="_blank" class="btn btn-primary" style="background: linear-gradient(135deg, var(--color-success) 0%, #059669 100%); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">🛒 Open Shopping List</a>
 
-                        <form action="{{ url_for('sync') }}" method="POST" id="sync-list-form">
-                            <button type="submit" class="btn btn-secondary">🔄 Update Shopping List</button>
-                        </form>
-                        
-                        <a href="{{ mealie_url }}/shopping-lists/{{ active_list_id }}" target="_blank" class="btn btn-primary" style="background: linear-gradient(135deg, var(--color-success) 0%, #059669 100%); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">🛒 Open Shopping List</a>
+                                <button type="button" class="btn btn-secondary" onclick="openStaplesModal()">📋 Manage Staples</button>
+                            </div>
+                        </div>
 
-                        <a href="{{ mealie_url }}" target="_blank" class="btn btn-secondary">🌐 Open Mealie UI</a>
+                        <!-- Group 2: System -->
+                        <div>
+                            <div class="control-group-label">System</div>
+                            <div class="control-group-buttons">
+                                <a href="{{ mealie_url }}" target="_blank" class="btn btn-secondary">🌐 Open Mealie UI</a>
+                            </div>
+                        </div>
                     </div>
 
+                    <!-- Group 3: Danger Zone -->
                     <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(239, 68, 68, 0.1);">
-                        <div style="color: var(--color-danger); font-size: 0.8rem; text-transform: uppercase; font-weight: 700; margin-bottom: 0.75rem; letter-spacing: 0.05em;">Danger Zone</div>
+                        <div class="control-group-label" style="color: var(--color-danger);">Danger Zone</div>
                         <form action="{{ url_for('clear_plan_route') }}" method="POST" onsubmit="return confirm('ARE YOU SURE? This will delete all current and next week meal plans and clear the active shopping list.');">
-                            <button type="submit" class="btn btn-danger" style="width: auto;">🗑️ Clear & Reset Plan</button>
+                            <button type="submit" class="btn btn-danger" style="width: auto; min-width: 180px;">🗑️ Clear & Reset Plan</button>
                         </form>
                     </div>
                 </div>
