@@ -3,36 +3,24 @@ import sys
 # Add the project root to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from datetime import datetime, timedelta
-import pytz
-
-import meal_planner
+from datetime import timedelta
+from mealie_planner.mealie_client import MealieClient
+from mealie_planner.utils import get_active_week_range
 from mealie_planner import config
 
-def get_current_and_next_planning_dates():
-    today = datetime.now(pytz.timezone(config.TIMEZONE))
-
-    # Calculate current planning week (Saturday to Friday)
-    # If today is Saturday or Sunday, this will be the current week
-    # If today is Monday-Friday, this will be the *past* Saturday to upcoming Friday
-    days_since_saturday = (today.weekday() - 5 + 7) % 7
-    current_week_start = today - timedelta(days=days_since_saturday)
-    current_week_end = current_week_start + timedelta(days=6)
-
-    # Calculate next planning week (Saturday to Friday)
-    next_week_start = current_week_end + timedelta(days=1)
-    next_week_end = next_week_start + timedelta(days=6)
-
-    return (
-        current_week_start.strftime("%Y-%m-%d"), current_week_end.strftime("%Y-%m-%d"),
-        next_week_start.strftime("%Y-%m-%d"), next_week_end.strftime("%Y-%m-%d")
-    )
-
 def wipe_mealie_data():
-    print("Attempting to wipe Mealie meal plans and active shopping list...")
-    client = meal_planner.MealieClient()
-
-    current_start_str, current_end_str, next_start_str, next_end_str = get_current_and_next_planning_dates()
+    """Wipe meal plans for current and next week and clear the active shopping list."""
+    client = MealieClient()
+    
+    # 1. Calculate planning ranges
+    current_start, current_end = get_active_week_range()
+    next_start = current_start + timedelta(days=7)
+    next_end = current_end + timedelta(days=7)
+    
+    current_start_str = current_start.strftime("%Y-%m-%d")
+    current_end_str = current_end.strftime("%Y-%m-%d")
+    next_start_str = next_start.strftime("%Y-%m-%d")
+    next_end_str = next_end.strftime("%Y-%m-%d")
 
     # Clear current week's meal plan
     print(f"Clearing meal plan for current week: {current_start_str} to {current_end_str}")

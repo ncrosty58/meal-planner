@@ -3,59 +3,59 @@ import sys
 import queue
 import threading
 import json
-from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_from_directory, make_response
 from datetime import datetime, timedelta
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from meal_planner import (
-    MealieClient,
-    generate_weekly_plan,
-    sync_shopping_list,
-    calculate_nutrition_for_range,
-    check_blackstone_compatibility,
-    send_email,
-    send_daily_reminder_email
-)
+from mealie_planner.mealie_client import MealieClient
+from mealie_planner.gemini_client import GeminiClient
+from mealie_planner.plan_generator import PlanGenerator
+from mealie_planner.shopping_sync import sync_shopping_list
+from mealie_planner.recipe_nutrition import calculate_nutrition_for_range
+from mealie_planner.recipe_crawler import check_blackstone_compatibility
+from mealie_planner.email_notifier import EmailNotifier, send_email, send_daily_reminder_email
+from mealie_planner.config import ACTIVE_LIST_ID, STAPLES_LIST_ID, RDA, TIMEZONE, APP_URL, FAMILY_RECIPIENT_EMAILS, FAMILY_NAMES
+from mealie_planner.utils import get_active_week_strings, sanitize_input
 from scripts.clear_mealie import wipe_mealie_data
 
-from mealie_planner.config import ACTIVE_LIST_ID, STAPLES_LIST_ID, RDA, TIMEZONE, APP_URL, FAMILY_RECIPIENT_EMAILS, FAMILY_NAMES
-
 MEALIE_API_URL = os.getenv('MEALIE_API_URL', 'http://mealie:9000')
-# Public-facing Mealie URL for UI links
 MEALIE_FRONTEND_URL = os.getenv('MEALIE_FRONTEND_URL', 'https://mealie.cosmoslab.dev')
+STATE_FILE = "/mealie-data/planner_state.json"
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'mealie_companion_secret_9926')
-
-# Helper to calculate the planning week range (starts most recent Saturday, ends next Friday)
-def get_planning_dates():
-    today = datetime.now(pytz.timezone(TIMEZONE))
-    # Find the most recent Saturday (or today if it is Saturday)
-    # weekday(): Mon=0, ..., Fri=4, Sat=5, Sun=6
-    days_since_saturday = (today.weekday() - 5 + 7) % 7
-    start_date = today - timedelta(days=days_since_saturday)
-    # Planning week is 7 days: Saturday to Friday
-    end_date = start_date + timedelta(days=6)
-    return start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
-
-
 
 @app.template_filter('select_day_name')
 def select_day_name(date_str):
     if not date_str:
         return ""
     try:
-        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
         return dt.strftime("%A")
     except Exception as e:
         print(f"Error parsing day name filter: {e}")
         return ""
 
+def load_state():
+    """Load persisted application state."""
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
 
-
-# Shared variable to hold manually selected low staples IDs for the current week's sync
-current_week_low_staples = []
+def save_state(state):
+    """Persist application state."""
+    try:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+        with open(STATE_FILE, 'w') as f:
+            json.dump(state, f)
+    except Exception as e:
+        print(f"Error saving state: {e}")
 
 @app.route('/favicon.ico')
 def favicon():
@@ -78,26 +78,18 @@ def index():
     if error_msg:
         flash(error_msg, "danger")
         
-    try:
-        client = MealieClient()
-    except Exception as e:
-        return f"<h1>Configuration Error</h1><p>{str(e)}</p>"
+    client = MealieClient()
+    state = load_state()
+    current_week_low_staples = state.get('low_staples', [])
 
-    # 1. Determine if a meal plan is already active for the upcoming/current week
-    start_date_str, end_date_str = get_planning_dates()
+    # 1. Determine active week
+    start_date_str, end_date_str = get_active_week_strings()
     meal_plans = client.get_meal_plan(start_date_str, end_date_str)
     
-    # Check if there are scheduled dinner entries (recipes or text notes)
-    # This detects if we are in Dashboard state
+    # Check if there are scheduled dinner entries
     dinners = [p for p in meal_plans if p['entryType'] == 'dinner' and (p.get('recipeId') or p.get('title') or p.get('text'))]
     
-    print(f"[Debug] Planning range: {start_date_str} to {end_date_str}")
-    print(f"[Debug] Total plans found: {len(meal_plans)}")
-    print(f"[Debug] Dinners found: {len(dinners)}")
-    if dinners:
-        print(f"[Debug] First dinner: {dinners[0]}")
-    
-    # 2. Get staples list items for the form (or dashboard)
+    # 2. Get data for UI
     staples = []
     try:
         staples = client.get_shopping_list_items(STAPLES_LIST_ID)
@@ -111,11 +103,9 @@ def index():
         print(f"Error reading recipes: {e}")
 
     if dinners:
-        # PLAN IS ALREADY SUBMITTED & GENERATED FOR THIS WEEK!
-        # Render the ACTIVE WEEK DASHBOARD
+        # Dashboard View
         daily_nutrition, averages = calculate_nutrition_for_range(start_date_str, end_date_str)
         
-        # Enrich meal_plans with Blackstone compatibility
         for p in meal_plans:
             if p['entryType'] == 'dinner' and p.get('recipeId'):
                 try:
@@ -126,7 +116,6 @@ def index():
             else:
                 p['is_blackstone'] = False
 
-        # Pull shopping list items
         shopping_list = []
         try:
             shopping_list = client.get_shopping_list_items(ACTIVE_LIST_ID)
@@ -134,11 +123,9 @@ def index():
         except Exception as e:
             print(f"Error reading active shopping list: {e}")
 
-        # Get dates for the 7-day planning week
         start_date_obj = datetime.strptime(start_date_str, "%Y-%m-%d")
         planning_dates = [(start_date_obj + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
 
-        # Format the active_list_id as a hyphenated UUID for the frontend link
         formatted_list_id = ACTIVE_LIST_ID
         if len(ACTIVE_LIST_ID) == 32:
             formatted_list_id = f"{ACTIVE_LIST_ID[:8]}-{ACTIVE_LIST_ID[8:12]}-{ACTIVE_LIST_ID[12:16]}-{ACTIVE_LIST_ID[16:20]}-{ACTIVE_LIST_ID[20:]}"
@@ -161,8 +148,7 @@ def index():
             active_list_id=formatted_list_id
         )
     else:
-        # NO PLAN YET. Render the QUESTIONNAIRE FORM
-        # Also format the active_list_id here just in case
+        # Questionnaire View
         formatted_list_id = ACTIVE_LIST_ID
         if len(ACTIVE_LIST_ID) == 32:
             formatted_list_id = f"{ACTIVE_LIST_ID[:8]}-{ACTIVE_LIST_ID[8:12]}-{ACTIVE_LIST_ID[12:16]}-{ACTIVE_LIST_ID[16:20]}-{ACTIVE_LIST_ID[20:]}"
@@ -178,271 +164,121 @@ def index():
             active_list_id=formatted_list_id
         )
 
-
 @app.route('/plan-stream')
 def plan_stream():
-    exclude_text = request.args.get('exclude_text', '')
-    freezer_items = request.args.get('freezer_items', '')
-    special_requests = request.args.get('special_requests', '')
+    """Server-Sent Events endpoint for real-time plan generation progress."""
+    exclude_text = sanitize_input(request.args.get('exclude_text', ''))
+    freezer_items = sanitize_input(request.args.get('freezer_items', ''))
+    special_requests = sanitize_input(request.args.get('special_requests', ''))
     low_staples_ids = request.args.getlist('low_staples')
     
-    q = queue.Queue()
-    start_date_str, end_date_str = get_planning_dates()
-    
-    global current_week_low_staples
-    current_week_low_staples = low_staples_ids
-    
-    def worker():
-        try:
-            def callback(msg, pct):
-                q.put({"type": "progress", "message": msg, "progress": pct})
-                
-            generate_weekly_plan(
-                start_date_str=start_date_str,
-                end_date_str=end_date_str,
-                exclude_text=exclude_text,
-                freezer_items=freezer_items,
-                special_requests=special_requests,
-                low_staples_ids=low_staples_ids,
-                progress_callback=callback
-            )
-            
-            q.put({"type": "complete"})
-        except Exception as e:
-            q.put({"type": "error", "message": str(e)})
-            
-    threading.Thread(target=worker).start()
-    
+    # Persist the selected low staples
+    save_state({'low_staples': low_staples_ids})
+
     def generate():
-        while True:
+        client = MealieClient()
+        gemini = GeminiClient()
+        generator = PlanGenerator(client, gemini)
+        
+        q = queue.Queue()
+        def callback(msg, progress=None):
+            q.put({"status": msg, "progress": progress})
+
+        start_date_str, end_date_str = get_active_week_strings()
+        
+        thread = threading.Thread(target=generator.generate_weekly_plan, kwargs={
+            "start_date_str": start_date_str,
+            "end_date_str": end_date_str,
+            "exclude_text": exclude_text,
+            "freezer_items": freezer_items,
+            "special_requests": special_requests,
+            "low_staples_ids": low_staples_ids,
+            "progress_callback": callback
+        })
+        thread.start()
+
+        while thread.is_alive() or not q.empty():
             try:
-                item = q.get(timeout=180) # 3 mins timeout
-                if item["type"] == "complete":
-                    yield f"data: {json.dumps({'status': 'complete', 'progress': 100})}\n\n"
-                    break
-                elif item["type"] == "error":
-                    yield f"data: {json.dumps({'status': 'error', 'message': item['message']})}\n\n"
-                    break
-                elif item["type"] == "progress":
-                    yield f"data: {json.dumps({'status': item['message'], 'progress': item['progress']})}\n\n"
+                data = q.get(timeout=1)
+                yield f"data: {json.dumps(data)}\n\n"
             except queue.Empty:
-                yield f"data: {json.dumps({'status': 'error', 'message': 'Plan generation timed out.'})}\n\n"
-                break
-                
+                continue
+        
+        yield f"data: {json.dumps({'status': 'complete'})}\n\n"
+
     return Response(generate(), mimetype='text/event-stream')
-
-
-@app.route('/plan', methods=['POST'])
-def plan():
-    exclude_text = request.form.get('exclude_text', '')
-    freezer_items = request.form.get('freezer_items', '')
-    special_requests = request.form.get('special_requests', '')
-    low_staples_ids = request.form.getlist('low_staples')
-    
-    global current_week_low_staples
-    current_week_low_staples = low_staples_ids
-    
-    start_date_str, end_date_str = get_planning_dates()
-    
-    try:
-        generate_weekly_plan(
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            exclude_text=exclude_text,
-            freezer_items=freezer_items,
-            special_requests=special_requests,
-            low_staples_ids=low_staples_ids
-        )
-        
-        flash("Successfully generated weekly plan and updated active shopping list!", "success")
-    except Exception as e:
-        flash(f"Error generating plan: {str(e)}", "danger")
-        
-    return redirect(url_for('index'))
-
 
 @app.route('/sync', methods=['POST'])
 def sync():
-    start_date_str, end_date_str = get_planning_dates()
-    global current_week_low_staples
+    """Manual trigger to re-sync the shopping list based on current plans."""
+    start_date_str, end_date_str = get_active_week_strings()
+    state = load_state()
+    low_staples = state.get('low_staples', [])
     
-    # Update low staples from POST form parameter if available
-    low_staples_ids = request.form.getlist('low_staples')
-    if low_staples_ids or request.form.get('staples_submitted') == '1':
-        current_week_low_staples = low_staples_ids
-        
+    # If the request comes from the staples modal, update the state
+    if request.form.get('staples_submitted'):
+        low_staples = request.form.getlist('low_staples')
+        save_state({'low_staples': low_staples})
+
     try:
-        sync_shopping_list(start_date_str, end_date_str, current_week_low_staples)
+        sync_shopping_list(start_date_str, end_date_str, low_staples)
         flash("Recalculated active shopping list successfully!", "success")
     except Exception as e:
         flash(f"Error syncing shopping list: {str(e)}", "danger")
         
     return redirect(url_for('index'))
 
-
 @app.route('/clear', methods=['POST'])
 def clear_plan_route():
     try:
         wipe_mealie_data()
-        flash("Successfully cleared meal plans and active shopping list from Mealie!", "success")
+        save_state({'low_staples': []})
+        flash("Successfully cleared meal plans and reset state!", "success")
     except Exception as e:
-        flash(f"Error clearing Mealie data: {str(e)}", "danger")
+        flash(f"Error clearing data: {str(e)}", "danger")
     return redirect(url_for('index'))
-
-
-@app.route('/change-meal', methods=['POST'])
-def change_meal():
-    date_str = request.form.get('date')
-    recipe_id = request.form.get('recipe_id')
-    meal_plan_entry_id = request.form.get('entry_id')
-    
-    client = MealieClient()
-    start_date_str, end_date_str = get_planning_dates()
-    global current_week_low_staples
-    
-    try:
-        if meal_plan_entry_id:
-            # Delete old entry
-            client.delete_meal_plan_entry(meal_plan_entry_id)
-            
-        if recipe_id == "SKIP":
-            # Schedule as 'Eating Out'
-            client.schedule_meal(date_str, "dinner", title="Eating Out", recipe_id=None)
-            flash("Dinner removed (set to Eating Out). Shopping list recalculated!", "success")
-        elif recipe_id:
-            # Schedule new recipe
-            client.schedule_meal(date_str, "dinner", recipe_id=recipe_id)
-            flash("Dinner recipe updated and shopping list recalculated!", "success")
-        else:
-            # If nothing selected, maybe it was a mistake or reset to 'Eating Out'
-            client.schedule_meal(date_str, "dinner", title="Eating Out", recipe_id=None)
-            flash("Dinner reset to Eating Out.", "info")
-        
-        # Trigger shopping list sync immediately
-        sync_shopping_list(start_date_str, end_date_str, current_week_low_staples)
-    except Exception as e:
-        flash(f"Error changing meal: {str(e)}", "danger")
-        
-    return redirect(url_for('index'))
-
 
 @app.route('/toggle-shopping-item', methods=['POST'])
 def toggle_shopping_item():
-    """Toggle the 'checked' status of a shopping list item in Mealie."""
     try:
         data = request.get_json()
         item_id = data.get('item_id')
         is_checked = data.get('checked')
         
         client = MealieClient()
-        
-        # 1. Fetch current items from the active list to find the full item object
-        # Mealie's PUT /api/households/shopping/items/{id} often requires the full object 
-        # to avoid stripping fields like labels or notes.
         items = client.get_shopping_list_items(ACTIVE_LIST_ID)
         target_item = next((item for item in items if item['id'] == item_id), None)
         
         if not target_item:
             return json.dumps({"success": False, "error": "Item not found"}), 404
             
-        # 2. Update ONLY the checked field in the local copy
         target_item['checked'] = is_checked
-        
-        # 3. Send the full updated object back to Mealie
         client.update_shopping_list_item(item_id, target_item)
         
         return json.dumps({"success": True})
     except Exception as e:
-        print(f"Error toggling shopping item: {e}")
         return json.dumps({"success": False, "error": str(e)}), 500
 
-
-@app.route('/trigger-qa')
-def trigger_qa():
-    """Manual trigger endpoint for Saturday Q/A email."""
-    if send_saturday_qa_email_job():
-        return "Q/A Email sent successfully!"
-    return "Failed to send Q/A email.", 500
-
-
-@app.route('/trigger-daily')
-def trigger_daily():
-    """Manual trigger endpoint for daily reminder email."""
-    if send_daily_reminder_job():
-        return "Daily reminder sent successfully!"
-    return "Failed to send daily reminder.", 500
-
-
-# --- Background Job Implementations ---
-
-def send_saturday_qa_email_job():
-    """Job to email Saturday Questionnaire link to family."""
-    app_url = APP_URL
-    
-    html = f"""
-    <html>
-      <body style="font-family: Arial, sans-serif; background-color: #f7f9fc; padding: 20px; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #e1e8ed;">
-          <h2 style="color: #E58325; margin-top: 0; text-align: center;">📋 Weekly Meal Planning Questionnaire</h2>
-          <p style="font-size: 16px; line-height: 1.6;">Hi {FAMILY_NAMES},</p>
-          <p style="font-size: 16px; line-height: 1.6;">It is Saturday, which means it is time to plan meals and shop for the upcoming week!</p>
-          <p style="font-size: 16px; line-height: 1.6;">Please click the button below to fill out the questionnaire (choose eating-out days, freezer/pantry/refrigerator items, and check off running-low staples):</p>
-          
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="{app_url}" style="background-color: #E58325; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">Fill Out Questionnaire</a>
-          </div>
-          
-          <p style="font-size: 14px; color: #888; text-align: center;">Note: Link redirects to your active dashboard once submitted to prevent double-entries.</p>
-        </div>
-      </body>
-    </html>
-    """
-    return send_email("📋 Weekly Meal Planning Questionnaire", html)
-
-
-def send_daily_reminder_job():
-    """Job to email daily meal reminders to family at 7:00 AM."""
-    return send_daily_reminder_email()
-
-
-
-@app.route('/debug-recipes')
-def debug_recipes_route():
-    recipes = meal_planner.get_recipes_from_db()
-    return str(recipes), 200
-
-# --- Scheduler Setup ---
-
-def start_scheduler():
-    scheduler = BackgroundScheduler(timezone=pytz.timezone(TIMEZONE))
-    
-    # 1. Daily reminders: Sunday to Friday at 7:00 AM (New York time)
-    scheduler.add_job(
-        send_daily_reminder_job,
-        'cron',
-        day_of_week='sun,mon,tue,wed,thu,fri',
-        hour=7,
-        minute=0,
-        id='daily_reminder'
-    )
-    
-    # 2. Saturday Q/A email: Saturdays at 8:00 AM
-    scheduler.add_job(
-        send_saturday_qa_email_job,
-        'cron',
-        day_of_week='sat',
-        hour=8,
-        minute=0,
-        id='saturday_qa'
-    )
-    
-    scheduler.start()
-    print("Background scheduler started successfully.")
-
-
-# Start scheduler when Flask context starts
-start_scheduler()
+@app.route('/change-meal', methods=['POST'])
+def change_meal():
+    try:
+        date_str = request.form.get('date')
+        recipe_id = request.form.get('recipe_id')
+        entry_id = request.form.get('entry_id')
+        
+        client = MealieClient()
+        if entry_id:
+            client.delete_meal_plan_entry(entry_id)
+            
+        if recipe_id != "SKIP":
+            client.schedule_meal(date_str, "dinner", recipe_id=recipe_id)
+        else:
+            client.schedule_meal(date_str, "dinner", title="Eating Out")
+            
+        flash("Meal changed successfully!", "success")
+    except Exception as e:
+        flash(f"Error changing meal: {str(e)}", "danger")
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    port = int(os.getenv('FLASK_PORT', '9926'))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=9926)

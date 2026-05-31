@@ -1,13 +1,26 @@
 import os
 import json
 import requests
+from .exceptions import ConfigurationError
 
 class GeminiClient:
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(GeminiClient, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
     def __init__(self, api_key=None, model_name=None):
+        if self._initialized:
+            return
+            
         self.api_key = api_key or os.getenv('GOOGLE_API_KEY')
         self.model = model_name or os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
         if not self.api_key:
-            raise RuntimeError("GOOGLE_API_KEY is not set in environment.")
+            raise ConfigurationError("GOOGLE_API_KEY is not set in environment.")
+        self._initialized = True
 
     def call(self, prompt: str, expect_json: bool = True, temperature: float = 0.2, thinking_budget: int = 0) -> str:
         """
@@ -29,16 +42,20 @@ class GeminiClient:
         }
 
         print("--- AI PROMPT ---")
-        print(prompt)
+        print(prompt[:500] + "..." if len(prompt) > 500 else prompt)
         print("-------------------")
 
-        resp = requests.post(url, json=payload, timeout=180)
-        resp.raise_for_status()
-        data = resp.json()
-        print("--- AI RAW RESPONSE ---")
-        print(json.dumps(data, indent=2))
-        print("-----------------------")
-        return data["candidates"][0]["content"]["parts"][0]["text"]
+        try:
+            resp = requests.post(url, json=payload, timeout=180)
+            resp.raise_for_status()
+            data = resp.json()
+            print("--- AI RAW RESPONSE (Meta) ---")
+            print(f"Response ID: {data.get('responseId')}")
+            print("-----------------------")
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+        except requests.exceptions.RequestException as e:
+            print(f"Gemini API call failed: {e}")
+            raise
 
 def call_gemini(prompt: str, expect_json: bool = True, temperature: float = 0.2, thinking_budget: int = 0) -> str:
     """Compatibility wrapper function."""

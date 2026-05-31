@@ -7,6 +7,7 @@ from .config import (
     _SHOPPING_LIST_SYNC_SKILL_DEFINITION
 )
 from .recipe_crawler import RecipeCrawler
+from .exceptions import MealieAPIError, SkillParsingError
 
 class ShoppingListSync:
     def __init__(self, mealie_client, gemini_client):
@@ -70,7 +71,7 @@ class ShoppingListSync:
                             disp = disp.strip()
                             if disp:
                                 raw_recipe_ingredients.append(disp)
-                    except Exception as e:
+                    except MealieAPIError as e:
                         print(f"Error fetching recipe details for ID {rid}: {e}")
                         
             print(f"[Sync] Extracted {len(raw_recipe_ingredients)} raw ingredient strings from meals.")
@@ -101,42 +102,36 @@ class ShoppingListSync:
             
             print("--- AI SHOPPING LIST SYNC PROMPT ---")
             ai_response = self.gemini.call(prompt, expect_json=True)
+            
             try:
-                ai_output = json.loads(ai_response)
-                print(f"[AI] Received {len(ai_output)} items from shopping list sync skill.")
-            except Exception as parse_err:
-                print(f"Failed to parse AI response: {parse_err}. Response was: {ai_response}")
-                raise parse_err
-                
-            # Fetch labels and cache them
-            existing_labels = self.client.get_labels()
-            label_cache = {l['name'].strip().lower(): l['id'] for l in existing_labels}
+                final_items = json.loads(ai_response)
+                if not isinstance(final_items, list):
+                    raise SkillParsingError("AI did not return a list for shopping list sync")
+            except Exception as e:
+                raise SkillParsingError(f"Failed to parse AI response: {e}")
 
+            # 4. Write to Mealie
+            if progress_callback:
+                progress_callback("Writing items to Mealie shopping list...", 98)
+            
+            print(f"[Sync] Final list has {len(final_items)} items. Clearing active list and writing bulk.")
+            
+            self.client.clear_shopping_list(ACTIVE_LIST_ID)
+            
+            # Mealie bulk create expects specific fields
+            all_labels = self.client.get_labels()
             def resolve_label_id(cat_name):
-                cat_name = cat_name.strip()
-                if not cat_name:
-                    return None
-                cat_lower = cat_name.lower()
-                if cat_lower in label_cache:
-                    return label_cache[cat_lower]
-                try:
-                    print(f"[Sync] Creating new label in Mealie: '{cat_name}'")
-                    new_lbl = self.client.create_label(cat_name)
-                    label_cache[cat_lower] = new_lbl['id']
-                    return new_lbl['id']
-                except Exception as le:
-                    print(f"Error creating label '{cat_name}': {le}")
-                    return None
+                # Try to find existing label matching category name (e.g. "Produce")
+                clean_cat = cat_name.split(". ", 1)[-1].strip().lower() if ". " in cat_name else cat_name.strip().lower()
+                for label in all_labels:
+                    if label['name'].lower() == clean_cat:
+                        return label['id']
+                return None
 
-            # 4. Process final ingredients: tag Dirty Dozen organic items
             ingredients_list = []
-            for idx, item in enumerate(ai_output):
-                name = item.get('name') or ''
-                name = name.strip()
-                if not name:
-                    continue
+            for idx, item in enumerate(final_items):
+                name = item.get('name', 'Unknown Item')
                 qty = item.get('quantity', 1.0)
-                
                 unit = item.get('unit') or ''
                 unit = unit.strip()
                 
@@ -144,7 +139,6 @@ class ShoppingListSync:
                 label_id = resolve_label_id(category) if category else None
                 
                 # For ingredients, include the unit in the note (e.g. "1 lb Chicken Breast")
-                # For staples (where unit might be null/empty), just use the name
                 full_note = f"{unit} {name}".strip() if unit else name
                 
                 ingredients_list.append({
@@ -156,26 +150,24 @@ class ShoppingListSync:
                     "labelId": label_id
                 })
                 
-            print(f"[Sync] Final shopping list contains {len(ingredients_list)} items.")
-                
-            # 5. Clear the active list and add new items
-            if progress_callback:
-                progress_callback("Clearing active shopping list in Mealie...", 98)
-            print(f"Clearing active shopping list {ACTIVE_LIST_ID}...")
-            self.client.clear_shopping_list(ACTIVE_LIST_ID)
+            self.client.add_shopping_list_items_bulk(ingredients_list)
             
             if progress_callback:
-                progress_callback(f"Bulk adding {len(ingredients_list)} items to active shopping list...", 99)
-            print(f"Adding {len(ingredients_list)} items in bulk to active shopping list...")
-            if ingredients_list:
-                self.client.add_shopping_list_items_bulk(ingredients_list)
-                
-            print(f"AI shopping list sync completed successfully. Added {len(ingredients_list)} items.")
-            if progress_callback:
-                progress_callback("Shopping list synchronization complete!", 100)
+                progress_callback("Shopping list sync complete!", 100)
             return True
+            
         except Exception as e:
             print(f"Error during AI shopping list sync: {e}")
             if progress_callback:
                 progress_callback(f"Error during shopping list sync: {str(e)}", 100)
             return False
+
+def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[], progress_callback=None, freezer_items=""):
+    """Standalone helper to run sync with fresh clients."""
+    from .mealie_client import MealieClient
+    from .gemini_client import GeminiClient
+    client = MealieClient()
+    gemini = GeminiClient()
+    syncer = ShoppingListSync(client, gemini)
+    return syncer.sync_shopping_list(start_date_str, end_date_str, low_staples_ids, progress_callback, freezer_items)
+

@@ -4,12 +4,14 @@ from datetime import datetime, timedelta
 
 from .config import (
     FAMILY_DIETARY_RULES_PROMPT, BREAKFAST_PROFILES, get_banned_recipes,
-    _MEAL_EXCLUSION_PARSING_SKILL_DEFINITION, _WEEKLY_MEAL_SELECTION_SKILL_DEFINITION,
-    _BANNED_RECIPES_SKILL_DEFINITION, _INGREDIENT_PARSING_SKILL_DEFINITION
+    _WEEKLY_MEAL_SELECTION_SKILL_DEFINITION,
+    _BANNED_RECIPES_SKILL_DEFINITION
 )
 from .recipe_crawler import RecipeCrawler
 from .shopping_sync import ShoppingListSync
 from .email_notifier import EmailNotifier
+from .parsers import parse_freezer_items, parse_exclusions
+from .exceptions import MealieAPIError, SkillParsingError
 
 class PlanGenerator:
     def __init__(self, mealie_client, gemini_client):
@@ -18,86 +20,6 @@ class PlanGenerator:
         self.crawler = RecipeCrawler(mealie_client, gemini_client)
         self.shopping = ShoppingListSync(mealie_client, gemini_client)
         self.notifier = EmailNotifier(mealie_client, gemini_client)
-
-    def parse_exclusions(self, text: str, start_date_str: str = None, end_date_str: str = None) -> dict:
-        """Use Gemini to interpret a free-text description of which meals to skip, delegating to the AI skill."""
-        if not text or not text.strip():
-            return {}
-
-        if start_date_str and end_date_str:
-            start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
-            end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
-        else:
-            # Standard app logic: Find the most recent Saturday
-            from .config import TIMEZONE
-            import pytz
-            today = datetime.now(pytz.timezone(TIMEZONE))
-            days_since_saturday = (today.weekday() - 5 + 7) % 7
-            start_date = today - timedelta(days=days_since_saturday)
-            end_date = start_date + timedelta(days=6)
-
-        num_days = (end_date - start_date).days + 1
-        week_dates = {
-            (start_date + timedelta(days=i)).strftime("%A"): (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
-            for i in range(num_days)
-        }
-
-        prompt = (
-            """You are an expert in the 'Mealie Meal Exclusion Parsing Skill'.
-
-""" +
-            _MEAL_EXCLUSION_PARSING_SKILL_DEFINITION +
-            """
-
-### CONTEXT FOR THIS INVOCATION:
-""" +
-            f"User input: {text}\n" +
-            f"Week dates: {', '.join(f'{d} ({dt})' for d, dt in week_dates.items())}.\n\n" +
-            "Return ONLY the JSON object as specified in the skill definition."
-        )
-
-        try:
-            raw = self.gemini.call(prompt, expect_json=True)
-            result = json.loads(raw)
-            valid_days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
-            valid_meals = {"breakfast", "lunch", "dinner"}
-            exclusions = {}
-            for day, meals in result.items():
-                if day in valid_days and isinstance(meals, list):
-                    cleaned_meals = [m for m in meals if m in valid_meals]
-                    if cleaned_meals:
-                        exclusions[day] = cleaned_meals
-            print(f"[AI] Parsed exclusions: {exclusions}")
-            return exclusions
-        except Exception as e:
-            print(f"[AI] parse_exclusions failed: {e} — no exclusions applied")
-            return {}
-
-    def parse_freezer_items(self, text: str) -> list:
-        """Use Gemini to parse free-text freezer/pantry/fridge items into structured ingredient data."""
-        if not text or not text.strip():
-            return []
-        
-        prompt = (
-            "You are an expert in the 'Ingredient Parsing Skill'.\n\n" +
-            _INGREDIENT_PARSING_SKILL_DEFINITION +
-            "\n\n### CONTEXT FOR THIS INVOCATION:\n" +
-            f"User input: {text}\n\n" +
-            "Return ONLY the JSON array as specified in the skill definition."
-        )
-        
-        try:
-            raw = self.gemini.call(prompt, expect_json=True)
-            result = json.loads(raw)
-            if isinstance(result, list):
-                print(f"[AI] Parsed freezer items: {result}")
-                return result
-        except Exception as e:
-            print(f"[AI] parse_freezer_items failed: {e} — falling back to simple split")
-        
-        # Fallback: simple comma split if AI fails
-        return [{"raw": i.strip(), "core_ingredient": i.strip(), "has_meat": False} 
-                for i in text.split(",") if i.strip()]
 
     def generate_weekly_plan(self, start_date_str, end_date_str, exclude_text="", freezer_items="", special_requests="", low_staples_ids=[], progress_callback=None):
         """Generate weekly plan using an AI-driven intelligent rule-based scoring engine and schedule in Mealie."""
@@ -112,7 +34,7 @@ class PlanGenerator:
         item_to_recipe_map = {}
         if freezer_items:
             # Use AI to parse free-text items into structured ingredients
-            parsed_items = self.parse_freezer_items(freezer_items)
+            parsed_items = parse_freezer_items(self.gemini, freezer_items)
             
             for item in parsed_items:
                 core = item.get("core_ingredient", item.get("raw", ""))
@@ -177,7 +99,7 @@ class PlanGenerator:
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
         end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
         num_days = (end_date - start_date).days + 1
-        exclusions = self.parse_exclusions(exclude_text, start_date_str, end_date_str)
+        exclusions = parse_exclusions(self.gemini, exclude_text, start_date, end_date)
         dinner_days = [
             (start_date + timedelta(days=i)).strftime("%A")
             for i in range(num_days)
@@ -195,7 +117,7 @@ class PlanGenerator:
                 if p.get('recipe') and p['recipe'].get('name'):
                     recent_recipe_names.append(p['recipe']['name'])
             recent_recipe_names = list(set(recent_recipe_names))
-        except Exception as e:
+        except MealieAPIError as e:
             print(f"Error fetching recently planned recipes: {e}")
 
         recipe_catalogue = [
@@ -296,7 +218,7 @@ class PlanGenerator:
         except Exception as e:
             print(f"[AI] Full plan generation failed: {e} — falling back to basic logic")
             if progress_callback:
-                progress_callback(f"Gemini selection failed ({str(e)}), falling back to basic selection...", 65)
+                progress_callback(f"Selection failed ({str(e)}), falling back to basic selection...", 65)
             
             # --- BASIC FALLBACK LOGIC ---
             random.shuffle(allowed_recipes)
@@ -335,20 +257,27 @@ class PlanGenerator:
             
         if progress_callback:
             progress_callback("Clearing old scheduled meals in Mealie calendar...", 70)
-        existing_plans = self.client.get_meal_plan(start_date_str, end_date_str)
-        for p in existing_plans:
-            self.client.delete_meal_plan_entry(p['id'])
+        
+        try:
+            existing_plans = self.client.get_meal_plan(start_date_str, end_date_str)
+            for p in existing_plans:
+                self.client.delete_meal_plan_entry(p['id'])
+        except MealieAPIError as e:
+            print(f"Error clearing existing plans: {e}")
             
         if progress_callback:
             progress_callback("Scheduling new breakfasts, lunches, and dinners...", 80)
         for m in meals:
-            self.client.schedule_meal(
-                date_str=m['date'],
-                entry_type=m['entryType'],
-                title=m.get('title') or "",
-                text=m.get('text') or "",
-                recipe_id=m.get('recipeId')
-            )
+            try:
+                self.client.schedule_meal(
+                    date_str=m['date'],
+                    entry_type=m['entryType'],
+                    title=m.get('title') or "",
+                    text=m.get('text') or "",
+                    recipe_id=m.get('recipeId')
+                )
+            except MealieAPIError as e:
+                print(f"Error scheduling meal {m}: {e}")
             
         self.shopping.sync_shopping_list(start_date_str, end_date_str, low_staples_ids, progress_callback=progress_callback, freezer_items=freezer_items)
         
@@ -359,3 +288,4 @@ class PlanGenerator:
         if progress_callback:
             progress_callback("Meal plan generation complete!", 100)
         print(f"Rule-based plan successfully generated and scheduled for {start_date_str} to {end_date_str}.")
+

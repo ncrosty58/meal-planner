@@ -6,294 +6,147 @@ from bs4 import BeautifulSoup
 import requests
 
 from .config import load_skill_md, _RECIPE_FINDER_SKILL_DEFINITION, get_banned_recipes
+from .exceptions import MealieAPIError, SkillParsingError
 
 class RecipeCrawler:
     def __init__(self, mealie_client, gemini_client):
         self.client = mealie_client
         self.gemini = gemini_client
 
-    def find_recipe_for_ingredient(self, ingredient, all_recipes=None):
-        """Look for a recipe in Mealie containing the ingredient in its name or ingredients notes.
-        
-        Expects a clean ingredient term (e.g., 'chicken thighs', 'cilantro') — 
-        normalization is handled upstream by the AI ingredient-parsing skill.
-        """
-        if all_recipes is None:
-            all_recipes = self.get_recipes_from_db()
-        
-        ing_lower = ingredient.lower().strip()
-        
-        # 1. Match recipe name (handle Mealie duplicate suffixes like ' (1)')
-        for r in all_recipes:
-            name = r['name']
-            cleaned_name = re.sub(r'\s*\(\d+\)$', '', name).lower()
-            if ing_lower in cleaned_name:
-                return r['id']
-                
-        # 2. Check recipe ingredients
-        for r in all_recipes:
-            for ing_text in r.get('ingredients', []):
-                if ing_lower in ing_text.lower():
-                    return r['id']
-        
-        # 3. Fallback: check if ALL significant words appear in a recipe's ingredients
-        words = [w for w in ing_lower.split() if len(w) > 2]
-        if words:
-            for r in all_recipes:
-                all_ing_text = ' '.join(ing.lower() for ing in r.get('ingredients', []))
-                if all(w in all_ing_text for w in words):
-                    return r['id']
-        
-        return None
-
-
-
-    def find_and_import_recipe(self, ingredient, existing_recipe_ids=[]) -> bool:
-        """Search for and import a recipe into Mealie using the Mealie Recipe Finder Skill workflow."""
-        print(f"No existing recipe using '{ingredient}'. Starting Recipe Finder workflow...")
-        
-        # Pre-fetch all recipes to check for existing orgURLs and prevent duplicates
-        all_recipes_overview = self.client.get_all_recipes()
-        existing_urls = {r.get('orgURL') for r in all_recipes_overview if r.get('orgURL')}
-
-        # 1. Construct Search Query (ingredient is already normalized by AI upstream)
-        meat_keywords = {'chicken', 'beef', 'salmon', 'turkey', 'pork', 'fish', 'steak', 'tuna', 'poultry', 'lamb'}
-        ingredient_lower = ingredient.lower()
-        has_meat = any(kw in ingredient_lower for kw in meat_keywords)
-        if has_meat:
-            query = f"healthy recipe with {ingredient}"
-        else:
-            query = f"healthy vegetarian recipe with {ingredient}"
-            
-        print(f"[Recipe Finder] Query: {query}")
-        
-        # 2. Perform Web Search (DuckDuckGo)
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        search_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
-        
-        try:
-            req = urllib.request.Request(search_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=10) as response:
-                html = response.read()
-        except Exception as e:
-            print(f"[Recipe Finder] DuckDuckGo search request failed: {e}")
+    def check_blackstone_compatibility(self, recipe_details):
+        """Analyze recipe name and instructions to see if it's compatible with a Blackstone griddle."""
+        if not recipe_details:
             return False
-            
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        # 3. Extract and Filter Potential Recipe Links
-        potential_links = []
-        recipe_keywords = {'recipe', 'food', 'cook', 'kitchen', 'eat'}
-        
-        for a in soup.find_all('a', href=True):
-            href = a['href']
-            
-            # Unwrap DuckDuckGo proxied links
-            if 'uddg=' in href:
-                parsed_href = urllib.parse.urlparse(href)
-                query_params = urllib.parse.parse_qs(parsed_href.query)
-                if 'uddg' in query_params:
-                    href = query_params['uddg'][0]
-                    
-            # Filter search engine links
-            parsed_url = urllib.parse.urlparse(href)
-            domain = parsed_url.netloc.lower()
-            if 'duckduckgo' in domain or 'yandex' in domain or 'google' in domain or 'bing' in domain:
-                continue
-                
-            # Keyword filter
-            href_lower = href.lower()
-            if any(kw in href_lower for kw in recipe_keywords):
-                if href not in potential_links:
-                    potential_links.append(href)
-                    if len(potential_links) >= 5:
-                        break
-                        
-        print(f"[Recipe Finder] Found {len(potential_links)} potential links for validation.")
-        
-        # Import RecipeNutrition locally to avoid circular dependencies
-        from .recipe_nutrition import RecipeNutrition
-        nutrition_imputer = RecipeNutrition(self.client, self.gemini)
-
-        # 4. AI-Driven Recipe Link Validation & 5. Import Validated Recipes
-        for url in potential_links:
-            print(f"[Recipe Finder] Fetching page for validation: {url}")
-            try:
-                req = urllib.request.Request(url, headers=headers)
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    page_html = response.read()
-            except Exception as e:
-                print(f"[Recipe Finder] Failed to fetch {url}: {e}")
-                continue
-                
-            page_soup = BeautifulSoup(page_html, 'html.parser')
-            
-            # Extract title and description
-            title = page_soup.title.string.strip() if page_soup.title else ""
-            desc_meta = page_soup.find('meta', attrs={'name': 'description'})
-            description = desc_meta.get('content', '').strip() if desc_meta else ""
-            
-            # Quick programmatic listicle/collection filter
-            title_lower = title.lower()
-            is_listicle = False
-            if re.search(r'\b\d+\s*\+?\s*(?:best|delicious|easy|healthy|quick|favorite|great|ideas|recipes|meals|dinners)\b', title_lower):
-                is_listicle = True
-            elif any(kw in title_lower for kw in ['roundup', 'round-up', 'listicles', 'collection of', 'best recipes', 'favorite recipes']):
-                is_listicle = True
-                
-            if is_listicle:
-                print(f"[Recipe Finder] Programmatically rejected listicle/collection: {title}")
-                continue
-
-            # Check if URL already exists in Mealie
-            if url in existing_urls:
-                print(f"[Recipe Finder] Recipe URL already exists in Mealie: {url}. Skipping import.")
-                return True
-            
-            # Check title against banned recipe names BEFORE importing
-            banned_names = [n.lower() for n in get_banned_recipes()]
-            
-            is_banned_import = False
-            for bn in banned_names:
-                if bn in title_lower or title_lower in bn:
-                    is_banned_import = True
-                    break
-            
-            if is_banned_import:
-                print(f"[Recipe Finder] REJECTED banned recipe before import: {title}")
-                continue
-            
-            # Validation prompt
-            validation_prompt = (
-                f"You are an expert in the 'Mealie Recipe Link Validator Skill'.\n\n"
-                f"{_RECIPE_FINDER_SKILL_DEFINITION}\n\n"
-                f"### CONTEXT FOR THIS INVOCATION:\n"
-                f"URL: {url}\n"
-                f"Title: {title}\n"
-                f"Description: {description}\n\n"
-                "Is this a single recipe?"
-            )
-            try:
-                val_res = self.gemini.call(validation_prompt, expect_json=False).strip().upper()
-                print(f"[Recipe Finder] Validation response for {url}: {val_res}")
-                if "YES" in val_res:
-                    # Link validated! Attempt Mealie Import.
-                    print(f"[Recipe Finder] Link validated. Attempting to import into Mealie...")
-                    payload = {
-                        "url": url,
-                        "includeCategories": True,
-                        "includeTags": True
-                    }
-                    r = requests.post(f"{self.client.api_url}/api/recipes/create/url", json=payload, headers=self.client.headers, timeout=30)
-                    if r.status_code in (200, 201):
-                        resp_json = r.json()
-                        slug = resp_json if isinstance(resp_json, str) else resp_json.get('slug')
-                        
-                        # Verify if the imported recipe has an image
-                        try:
-                            recipe_details = self.client.get_recipe_details(slug)
-                            if not recipe_details.get('image'):
-                                print(f"[Recipe Finder] Imported recipe '{slug}' has no image. Deleting and skipping...")
-                                self.client.delete_recipe(recipe_details['id'])
-                                continue
-                                
-                            # Automatically impute nutrition on new imports if missing/incomplete
-                            db_nutrition = recipe_details.get('nutrition', {})
-                            key_fields = ['calories', 'proteinContent', 'carbohydrateContent', 'fatContent', 'fiberContent', 'sodiumContent']
-                            if not db_nutrition or any(db_nutrition.get(f) is None or db_nutrition.get(f) == "" or db_nutrition.get(f) == 0 or db_nutrition.get(f) == "0" for f in key_fields):
-                                recipe_details = nutrition_imputer.impute_recipe_nutrition(recipe_details)
-                        except Exception as img_err:
-                            print(f"[Recipe Finder] Error verifying image or estimating nutrition for '{slug}': {img_err}")
-                            continue
-
-                        print(f"[Recipe Finder] Successfully imported recipe to Mealie with image. Slug: {slug}")
-                        
-                        # Post-import safety check: verify imported recipe isn't banned
-                        imported_name_lower = recipe_details.get('name', '').lower()
-                        post_ban = False
-                        for bn in banned_names:
-                            if bn in imported_name_lower or imported_name_lower in bn:
-                                post_ban = True
-                                break
-                        if post_ban:
-                            print(f"[Recipe Finder] Post-import ban check FAILED for '{recipe_details['name']}'. Deleting.")
-                            self.client.delete_recipe(recipe_details['id'])
-                            continue
-                        
-                        return True
-                    else:
-                        print(f"[Recipe Finder] Mealie import failed with status {r.status_code}: {r.text}")
-            except Exception as e:
-                print(f"[Recipe Finder] Error validating or importing link {url}: {e}")
-                
-        print("[Recipe Finder] Failed to find or import a recipe.")
-        return False
-
-    def get_recipes_from_api(self):
-        """Fetch all recipes with their nutrition, tags, and ingredients from Mealie via API concurrently."""
-        all_recipes_overview = self.client.get_all_recipes()
-        detailed_recipes = []
-        
-        # Import parse_nutrient_val locally to avoid circular dependencies
-        from .recipe_nutrition import parse_nutrient_val
-
-        def fetch_details(r_overview):
-            try:
-                full_recipe = self.client.get_recipe_details(r_overview['id'])
-                nutrition = full_recipe.get('nutrition', {})
-                
-                ingredients_list = []
-                for ing in full_recipe.get('recipeIngredient', []):
-                    note = ing.get('note') or ""
-                    orig = ing.get('originalText') or ""
-                    ing_text = f"{note} {orig}".strip()
-                    if ing_text:
-                        ingredients_list.append(ing_text.lower())
-                
-                instructions_list = [i.get('text', '').lower() for i in full_recipe.get('recipeInstructions', [])]
-                
-                return {
-                    'id': full_recipe['id'],
-                    'name': full_recipe['name'],
-                    'slug': full_recipe.get('slug'),
-                    'description': full_recipe.get('description'),
-                    'calories': parse_nutrient_val(nutrition.get('calories')),
-                    'fiber_content': parse_nutrient_val(nutrition.get('fiberContent')),
-                    'protein_content': parse_nutrient_val(nutrition.get('proteinContent')),
-                    'carbohydrate_content': parse_nutrient_val(nutrition.get('carbohydrateContent')),
-                    'fat_content': parse_nutrient_val(nutrition.get('fatContent')),
-                    'sodium_content': parse_nutrient_val(nutrition.get('sodiumContent')),
-                    'sugar_content': parse_nutrient_val(nutrition.get('sugarContent')),
-                    'cholesterol_content': parse_nutrient_val(nutrition.get('cholesterolContent')),
-                    'tags': [t.get('name', '').lower() for t in full_recipe.get('tags', [])],
-                    'ingredients': ingredients_list,
-                    'instructions': instructions_list
-                }
-            except Exception as e:
-                print(f"Error fetching detailed recipe for {r_overview.get('id', 'Unknown')}: {e}")
-                return None
-
-        # Fetch concurrently using a ThreadPoolExecutor with optimized workers count
-        workers = min(4, len(all_recipes_overview) or 1)
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            results = executor.map(fetch_details, all_recipes_overview)
-            
-        for res in results:
-            if res is not None:
-                detailed_recipes.append(res)
-                
-        return detailed_recipes
-
-    def get_recipes_from_db(self):
-        """Fetch all recipes with their nutrition, tags, and ingredients from Mealie using REST API."""
-        return self.get_recipes_from_api()
-
-    def check_blackstone_compatibility(self, recipe):
-        """Check if a recipe uses the Blackstone griddle."""
-        name_lower = recipe['name'].lower()
-        instructions = recipe.get('recipeInstructions', [])
+        name_lower = recipe_details.get('name', '').lower()
+        instructions = recipe_details.get('recipeInstructions', [])
         instructions_text = " ".join([i.get('text', '').lower() for i in instructions if i.get('text')]).lower()
         
         return 'blackstone' in name_lower or 'griddle' in name_lower or 'blackstone' in instructions_text or 'griddle' in instructions_text
+
+    def get_recipes_from_db(self):
+        """Fetch all current recipes from the Mealie DB."""
+        return self.client.get_all_recipes()
+
+    def find_recipe_for_ingredient(self, ingredient_name, all_recipes=None):
+        """Search the current recipe database for a recipe that matches the ingredient name."""
+        if not all_recipes:
+            all_recipes = self.get_recipes_from_db()
+            
+        search_term = ingredient_name.lower().strip()
+        # 1. Look for exact name match
+        for r in all_recipes:
+            if r['name'].lower().strip() == search_term:
+                return r['id']
+        
+        # 2. Look for name containing term
+        for r in all_recipes:
+            if search_term in r['name'].lower():
+                return r['id']
+                
+        # 3. Look for term in slug
+        for r in all_recipes:
+            if search_term.replace(' ', '-') in r.get('slug', '').lower():
+                return r['id']
+                
+        return None
+
+    def search_recipes(self, query):
+        """Perform a web search for recipe URLs."""
+        search_query = f"{query} recipe"
+        url = f"https://duckduckgo.com/html/?q={urllib.parse.quote(search_query)}"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                html = response.read()
+            
+            soup = BeautifulSoup(html, 'html.parser')
+            links = []
+            for a in soup.find_all('a', class_='result__a', href=True):
+                href = a['href']
+                # Clean DuckDuckGo redirect URLs
+                if 'uddg=' in href:
+                    href = urllib.parse.unquote(href.split('uddg=')[1].split('&')[0])
+                if 'youtube.com' not in href and 'pinterest.com' not in href:
+                    links.append(href)
+            return links[:5]
+        except Exception as e:
+            print(f"[Crawler] Web search failed: {e}")
+            return []
+
+    def get_url_metadata(self, url):
+        """Fetch the title and description of a URL for AI validation."""
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        try:
+            r = requests.get(url, headers=headers, timeout=10)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, 'html.parser')
+            title = soup.title.string if soup.title else ""
+            desc = ""
+            meta_desc = soup.find('meta', attrs={'name': 'description'})
+            if meta_desc:
+                desc = meta_desc.get('content', '')
+            return {'url': url, 'title': title.strip(), 'description': desc.strip()}
+        except:
+            return None
+
+    def validate_recipe_link_with_ai(self, url, title, description):
+        """Use Gemini to confirm if a URL is actually a single, high-quality recipe."""
+        prompt = (
+            "You are an expert in the 'Mealie Recipe Link Validator Skill'.\n\n" +
+            _RECIPE_FINDER_SKILL_DEFINITION +
+            "\n\n### CONTEXT FOR THIS INVOCATION:\n" +
+            f"URL: {url}\nTitle: {title}\nDescription: {description}\n\n" +
+            "Return ONLY 'YES' or 'NO'."
+        )
+        try:
+            response = self.gemini.call(prompt, expect_json=False)
+            return 'YES' in response.upper()
+        except:
+            return False
+
+    def find_and_import_recipe(self, ingredient_name, existing_recipe_ids=None):
+        """Search the web for a recipe, validate it with AI, and import it into Mealie."""
+        print(f"[Crawler] Searching for recipe for: {ingredient_name}")
+        search_results = self.search_recipes(ingredient_name)
+        
+        for url in search_results:
+            try:
+                # 1. Fetch metadata for AI validation
+                metadata = self.get_url_metadata(url)
+                if not metadata:
+                    continue
+                
+                # 2. Use AI to validate if it's a good single recipe link
+                is_valid = self.validate_recipe_link_with_ai(metadata['url'], metadata['title'], metadata['description'])
+                if not is_valid:
+                    print(f"[Crawler] AI rejected link: {url}")
+                    continue
+                
+                # 3. Import into Mealie
+                print(f"[Crawler] Importing valid recipe: {url}")
+                import_url = f"{self.client.api_url}/api/recipes/create-url"
+                payload = {"url": url}
+                # Use internal _request helper if possible, or just standard requests for this one-off
+                r = requests.post(import_url, json=payload, headers=self.client.headers)
+                r.raise_for_status()
+                print(f"[Crawler] Successfully imported: {ingredient_name}")
+                return True
+                
+            except Exception as e:
+                print(f"[Crawler] Error processing link {url}: {e}")
+                continue
+                
+        return False
+
+def check_blackstone_compatibility(recipe_details):
+    """Standalone utility to check Blackstone compatibility without needing a crawler instance."""
+    if not recipe_details:
+        return False
+    name_lower = recipe_details.get('name', '').lower()
+    instructions = recipe_details.get('recipeInstructions', [])
+    instructions_text = " ".join([i.get('text', '').lower() for i in instructions if i.get('text')]).lower()
+    
+    return 'blackstone' in name_lower or 'griddle' in name_lower or 'blackstone' in instructions_text or 'griddle' in instructions_text
+
