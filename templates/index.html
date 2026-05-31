@@ -514,7 +514,7 @@
         <div class="card" style="width: 90%; max-width: 650px; position: relative;">
             <button onclick="closeStaplesModal()" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
             <div class="card-header"><h2 class="card-title">Manage Staples</h2></div>
-            <form id="staples-form" action="{{ url_for('sync') }}" method="POST" onsubmit="showLoading('Synchronizing Larder...', 'Updating staples and ingredients...')">
+            <form id="staples-form" action="{{ url_for('update_staples') }}" method="POST" onsubmit="showLoading('Updating Provisions...', 'Refreshing larder inventory...')">
                 <input type="hidden" name="staples_submitted" value="1">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; max-height: 350px; overflow-y: auto; background: #FAF9F6; padding: 1rem; margin-bottom: 1.25rem; border: 1px solid var(--color-border);">
                     {% for item in staples %}

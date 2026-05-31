@@ -226,6 +226,25 @@ def plan_stream():
 
     return Response(generate(), mimetype='text/event-stream')
 
+@app.route('/update-staples', methods=['POST'])
+def update_staples():
+    """Fast endpoint specifically for the staples modal."""
+    if request.form.get('staples_submitted'):
+        low_staples = request.form.getlist('low_staples')
+        save_state({'low_staples': low_staples})
+        
+        try:
+            from mealie_planner.shopping_sync import ShoppingListSync
+            client = UnifiedMealieClient()
+            gemini = GeminiClient()
+            syncer = ShoppingListSync(client, gemini)
+            syncer.sync_staples_only(low_staples)
+            flash("Staples updated successfully!", "success")
+        except Exception as e:
+            flash(f"Error updating staples: {str(e)}", "danger")
+
+    return redirect(url_for('index'))
+
 @app.route('/sync', methods=['POST'])
 def sync():
     """Manual trigger to re-sync the shopping list based on current plans."""

@@ -15,6 +15,70 @@ class ShoppingListSync:
         self.gemini = gemini_client
         self.crawler = RecipeCrawler(mealie_client, gemini_client)
 
+    def sync_staples_only(self, low_staples_ids) -> bool:
+        """Fast, deterministic sync of staples only. No AI, no clearing of recipes."""
+        print("[Sync] Performing fast staples-only update...")
+        try:
+            # 1. Fetch current state
+            staples = self.client.get_shopping_list_items(STAPLES_LIST_ID)
+            active_items = self.client.get_shopping_list_items_for_list(ACTIVE_LIST_ID)
+            
+            low_ids_clean = {s_id.replace('-', '').lower() for s_id in low_staples_ids}
+            
+            # Identify which items on the active list are "staples"
+            # We match by name against the master staples list
+            staple_names = {s['note'].strip().lower(): s for s in staples}
+            
+            active_staple_notes = []
+            active_non_staple_notes = []
+            for item in active_items:
+                note = item['note'].strip().lower()
+                if note in staple_names:
+                    active_staple_notes.append(item)
+                else:
+                    active_non_staple_notes.append(item)
+
+            # 2. Determine Additions
+            # Items in low_ids_clean that aren't on the active list yet
+            to_add = []
+            active_notes_set = {i['note'].strip().lower() for i in active_items}
+            
+            for s in staples:
+                if s['id'].replace('-', '').lower() in low_ids_clean:
+                    if s['note'].strip().lower() not in active_notes_set:
+                        to_add.append({
+                            "shoppingListId": ACTIVE_LIST_ID,
+                            "note": s['note'],
+                            "quantity": s.get('quantity', 1.0),
+                            "checked": False,
+                            "labelId": s.get('labelId')
+                        })
+
+            # 3. Determine Deletions
+            # Items on the active list that ARE staples but are NOT in low_ids_clean anymore
+            to_delete_ids = []
+            for item in active_staple_notes:
+                # Find the master staple this item belongs to
+                master_staple = staple_names.get(item['note'].strip().lower())
+                if master_staple:
+                    m_id = master_staple['id'].replace('-', '').lower()
+                    if m_id not in low_ids_clean:
+                        to_delete_ids.append(item['id'])
+
+            # 4. Execute updates
+            if to_delete_ids:
+                print(f"[Sync] Removing {len(to_delete_ids)} staples no longer marked as low.")
+                self.client.delete_shopping_list_items_bulk(to_delete_ids)
+            
+            if to_add:
+                print(f"[Sync] Adding {len(to_add)} new low staples.")
+                self.client.add_shopping_list_items_bulk(to_add)
+
+            return True
+        except Exception as e:
+            print(f"Error during fast staples sync: {e}")
+            return False
+
     def sync_shopping_list(self, start_date_str, end_date_str, low_staples_ids=[], progress_callback=None, freezer_items="") -> bool:
         """Sync active shopping list based on scheduled recipes and low staples using the unified shopping-list-sync AI skill."""
         print(f"Starting AI shopping list sync for {start_date_str} to {end_date_str}...")
