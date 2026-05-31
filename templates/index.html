@@ -1281,8 +1281,12 @@
             <!-- Tab 2: Live Shopping List -->
             <div id="tab-shopping" class="tab-content" style="display: none;">
                 <div class="card">
-                    <div class="card-title">
-                        🛒 Live Shopping List
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <div class="card-title" style="margin-bottom: 0;">🛒 Live Shopping List</div>
+                        <button type="button" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.8rem; display: flex; align-items: center; gap: 0.4rem;" onclick="copyShoppingList()">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            Copy List
+                        </button>
                     </div>
                     
                     <!-- Quick Add Form -->
@@ -2001,8 +2005,53 @@
                 return processedLines.join('');
             }
 
-            // Trigger load from storage
-            loadChatFromStorage();
+        // 13. Copy Shopping List to Clipboard
+        function copyShoppingList() {
+            const items = document.querySelectorAll('.shopping-item');
+            const lines = [];
+            
+            items.forEach(item => {
+                const checkbox = item.querySelector('.shopping-list-checkbox');
+                if (checkbox && !checkbox.checked) {
+                    const textSpan = item.querySelector('.shopping-item-text');
+                    if (textSpan) {
+                        // Extract text and clean up whitespace/extra tags
+                        const text = textSpan.innerText.trim();
+                        lines.push(`- ${text}`);
+                    }
+                }
+            });
+
+            if (lines.length === 0) {
+                alert("No active items on the shopping list to copy!");
+                return;
+            }
+
+            const fullText = lines.join('\n');
+            
+            navigator.clipboard.writeText(fullText).then(() => {
+                const btn = event.currentTarget;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Copied!
+                `;
+                btn.classList.remove('btn-secondary');
+                btn.classList.add('btn-primary');
+                
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn-secondary');
+                }, 2000);
+            }).catch(err => {
+                console.error('Could not copy text: ', err);
+                alert("Failed to copy to clipboard.");
+            });
+        }
+
+        // Trigger load from storage
+        loadChatFromStorage();
         });
     </script>
 </body>
