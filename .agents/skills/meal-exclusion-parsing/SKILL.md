@@ -14,6 +14,8 @@ This skill provides instructions for interpreting a free-text description of mea
 ## Workflow
 
 1.  **Parse User Input:** Read the `user_input` to identify which meals on which days should be skipped.
+    *   **Day-Level Logic:** If the user specifies a day (e.g., "skip Saturday" or "not home Monday") without naming specific meals, you MUST assume ALL meals for that day (breakfast, lunch, AND dinner) are to be skipped.
+    *   **Meal-Level Logic:** If the user specifies specific meals (e.g., "no dinner Wednesday"), only include those specific meals.
 
 2.  **Identify Valid Days and Meals:**
     *   Valid day names are: `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday`.

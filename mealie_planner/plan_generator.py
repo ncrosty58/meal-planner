@@ -212,18 +212,26 @@ class PlanGenerator:
                 # Deterministic Exclusion Enforcement
                 day_name = datetime.strptime(d_str, "%Y-%m-%d").strftime("%A")
                 day_exclusions = exclusions.get(day_name, [])
+                print(f"[Plan Generation] Processing {day_name} ({d_str}) with exclusions: {day_exclusions}")
 
                 # Breakfast
                 if 'breakfast' in day_exclusions:
                     meals.append({"date": d_str, "entryType": "breakfast", "title": "Skipped", "recipeId": None})
                 else:
-                    meals.append({"date": d_str, "entryType": "breakfast", "title": m.get('breakfast', 'Staples'), "recipeId": None})
+                    breakfast_title = m.get('breakfast', 'Staples')
+                    # Double-check if AI returned something else for skipped meal
+                    if breakfast_title.lower() == 'skipped':
+                        breakfast_title = "Skipped"
+                    meals.append({"date": d_str, "entryType": "breakfast", "title": breakfast_title, "recipeId": None})
                 
                 # Lunch
                 if 'lunch' in day_exclusions:
                     meals.append({"date": d_str, "entryType": "lunch", "title": "Skipped", "recipeId": None})
                 else:
-                    meals.append({"date": d_str, "entryType": "lunch", "title": m.get('lunch', 'Leftovers'), "recipeId": None})
+                    lunch_title = m.get('lunch', 'Leftovers')
+                    if lunch_title.lower() == 'skipped':
+                        lunch_title = "Skipped"
+                    meals.append({"date": d_str, "entryType": "lunch", "title": lunch_title, "recipeId": None})
                 
                 # Dinner
                 if 'dinner' in day_exclusions:
