@@ -19,7 +19,10 @@ from meal_planner import (
 )
 
 from mealie_planner.config import ACTIVE_LIST_ID, STAPLES_LIST_ID, RDA, TIMEZONE, APP_URL, FAMILY_RECIPIENT_EMAILS, FAMILY_NAMES
-from scripts.clear_mealie import wipe_mealie_data
+
+MEALIE_API_URL = os.getenv('MEALIE_API_URL', 'http://mealie:9000')
+# Public-facing Mealie URL for UI links
+MEALIE_FRONTEND_URL = os.getenv('MEALIE_FRONTEND_URL', 'https://mealie.cosmoslab.dev')
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'mealie_companion_secret_9926')
@@ -133,7 +136,9 @@ def index():
             rda=RDA,
             all_recipes=all_recipes,
             staples=staples,
-            low_staples=current_week_low_staples
+            low_staples=current_week_low_staples,
+            mealie_url=MEALIE_FRONTEND_URL,
+            active_list_id=ACTIVE_LIST_ID
         )
     else:
         # NO PLAN YET. Render the QUESTIONNAIRE FORM
@@ -143,7 +148,9 @@ def index():
             start_date=start_date_str,
             end_date=end_date_str,
             staples=staples,
-            low_staples=current_week_low_staples
+            low_staples=current_week_low_staples,
+            mealie_url=MEALIE_FRONTEND_URL,
+            active_list_id=ACTIVE_LIST_ID
         )
 
 
