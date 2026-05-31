@@ -670,10 +670,17 @@
             const es = new EventSource(`/plan-stream?${params.toString()}`);
             es.onmessage = (ev) => {
                 const d = JSON.parse(ev.data);
-                if (d.status === 'complete') window.location.href = '/?success_msg=Menu Ready';
-                else document.getElementById('loading-log').innerText = d.status || '';
+                if (d.status === 'complete') {
+                    es.close();
+                    window.location.href = '/?success_msg=Menu Ready';
+                } else {
+                    document.getElementById('loading-log').innerText = d.status || '';
+                }
             };
-            es.onerror = () => window.location.href = '/?error_msg=Agent Error';
+            es.onerror = () => {
+                es.close();
+                window.location.href = '/?error_msg=Agent Error';
+            };
         }
 
         document.addEventListener('DOMContentLoaded', () => {
