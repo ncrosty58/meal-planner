@@ -17,6 +17,7 @@ from meal_planner import (
     send_email,
     send_daily_reminder_email
 )
+from scripts.clear_mealie import wipe_mealie_data
 
 from mealie_planner.config import ACTIVE_LIST_ID, STAPLES_LIST_ID, RDA, TIMEZONE, APP_URL, FAMILY_RECIPIENT_EMAILS, FAMILY_NAMES
 
