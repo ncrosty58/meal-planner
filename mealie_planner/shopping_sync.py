@@ -125,12 +125,45 @@ class ShoppingListSync:
             
             # Mealie bulk create expects specific fields
             all_labels = self.client.get_labels()
-            def resolve_label_id(cat_name):
-                # Try to find existing label matching category name (e.g. "Produce")
-                clean_cat = cat_name.split(". ", 1)[-1].strip().lower() if ". " in cat_name else cat_name.strip().lower()
+            
+            # Map AI categories to potential Mealie label names (Fuzzy Matcher)
+            CATEGORY_MAPPING = {
+                "1. Produce": ["produce", "vegetables & greens", "fruits", "berries", "mushrooms", "herbs & spices"],
+                "2. Bakery": ["bakery", "bread & salty snacks", "pre-made doughs & wrappers"],
+                "3. Meat, Seafood & Vegetarian Alternatives": ["meat", "meats", "poultry", "fish", "seafood & seaweed", "dairy-free & meat substitutes", "legumes"],
+                "4. Dairy, Cheese & Eggs": ["dairy & eggs", "dairy", "cheese", "eggs"],
+                "5. Pantry / Center Aisle Grains & Canned Goods": ["pantry", "grains & cereals", "pasta", "canned food", "soups, stews & stock", "legumes"],
+                "6. Baking, Spices, Oils & Condiments": ["baking", "spices", "oils & fats", "condiments", "sauces, spreads & dip", "dressings & vinegars", "nuts & seeds", "sugar & sweeteners", "seasonings & spice blends"],
+                "7. Frozen Foods": ["frozen", "frozen foods"],
+                "8. Beverages": ["beverages", "wine, beer & spirits"],
+                "9. Household / Miscellaneous / Non-Food items": ["household", "miscellaneous", "non-food", "supplements & extracts"]
+            }
+
+            def resolve_label_id(ai_category):
+                if not ai_category:
+                    return None
+                
+                # 1. Direct match (case-insensitive)
+                clean_ai_cat = ai_category.strip().lower()
+                # Remove leading numbers/dots (e.g. "1. Produce" -> "produce")
+                simple_ai_cat = clean_ai_cat.split(". ", 1)[-1].strip()
+                
                 for label in all_labels:
-                    if label['name'].lower() == clean_cat:
+                    label_name = label['name'].lower()
+                    if label_name == simple_ai_cat or label_name == clean_ai_cat:
                         return label['id']
+                
+                # 2. Map-based match
+                potential_matches = CATEGORY_MAPPING.get(ai_category, [])
+                for label in all_labels:
+                    if label['name'].lower() in potential_matches:
+                        return label['id']
+                
+                # 3. Substring match as last resort
+                for label in all_labels:
+                    if label['name'].lower() in simple_ai_cat or simple_ai_cat in label['name'].lower():
+                        return label['id']
+                        
                 return None
 
             ingredients_list = []
