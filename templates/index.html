@@ -576,7 +576,7 @@
             background: rgba(11, 15, 25, 0.7);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            z-index: 999;
+            z-index: 2000;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -587,7 +587,7 @@
         .modal-content {
             background: rgba(22, 30, 49, 0.95);
             border: 1px solid var(--border-glow);
-            border-radius: 20px;
+            border-radius: 8px;
             box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
             width: 90%;
             max-width: 550px;
@@ -1181,6 +1181,18 @@
         }
 
         function openStaplesModal() {
+            // Close drawer first for smoother transition
+            const sideDrawer = document.getElementById('side-drawer');
+            const drawerOverlay = document.getElementById('drawer-overlay');
+            const drawerToggle = document.getElementById('drawer-toggle');
+            
+            if (sideDrawer && sideDrawer.classList.contains('active')) {
+                sideDrawer.classList.remove('active');
+                if (drawerOverlay) drawerOverlay.classList.remove('active');
+                if (drawerToggle) drawerToggle.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+
             const modal = document.getElementById('staples-modal');
             if (modal) modal.style.display = 'flex';
         }
