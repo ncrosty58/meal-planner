@@ -87,39 +87,7 @@ class ShoppingListSync:
             
             # Fetch actual labels from Mealie
             all_labels = self.client.get_labels()
-            
-            # Deduplicate labels: prefer specific names over generic numbered defaults
-            # (e.g. if we have "Vegetables & Greens", we don't need "1. Produce")
-            REDUNDANT_DEFAULTS = {
-                "1. Produce": ["vegetables & greens", "fruits", "berries", "mushrooms", "herbs & spices", "produce"],
-                "2. Bakery": ["bakery", "bread & salty snacks", "pre-made doughs & wrappers"],
-                "3. Meat, Seafood & Vegetarian Alternatives": ["meat", "meats", "poultry", "fish", "seafood & seaweed", "dairy-free & meat substitutes", "legumes"],
-                "4. Dairy, Cheese & Eggs": ["dairy & eggs", "dairy", "cheese", "eggs"],
-                "5. Pantry / Center Aisle Grains & Canned Goods": ["pantry", "grains & cereals", "pasta", "canned food", "soups, stews & stock", "legumes"],
-                "6. Baking, Spices, Oils & Condiments": ["baking", "spices", "oils & fats", "condiments", "sauces, spreads & dip", "dressings & vinegars", "nuts & seeds", "sugar & sweeteners", "seasonings & spice blends"],
-                "6. Baking, Spices & Condiments": ["baking", "spices", "oils & fats", "condiments", "sauces, spreads & dip", "dressings & vinegars", "nuts & seeds", "sugar & sweeteners", "seasonings & spice blends"],
-                "7. Frozen Foods": ["frozen", "frozen foods"],
-                "8. Beverages": ["beverages", "wine, beer & spirits"],
-                "9. Household / Miscellaneous / Non-Food items": ["household", "miscellaneous", "non-food", "supplements & extracts"]
-            }
-
-            label_names_lower = {l['name'].lower() for l in all_labels}
-            labels_to_keep = []
-            suppressed_count = 0
-
-            for label in all_labels:
-                name = label['name']
-                if name in REDUNDANT_DEFAULTS:
-                    # Check if ANY of the more specific labels exist
-                    has_specific = any(spec in label_names_lower for spec in REDUNDANT_DEFAULTS[name])
-                    if has_specific:
-                        print(f"[Sync] Suppressing generic label '{name}' because specific versions exist.")
-                        suppressed_count += 1
-                        continue
-                labels_to_keep.append(label)
-
-            available_label_names = [label['name'] for label in labels_to_keep]
-            print(f"[Sync] Passing {len(available_label_names)} labels to AI ({suppressed_count} suppressed).")
+            available_label_names = [label['name'] for label in all_labels]
 
             payload = {
                 "ingredients": raw_recipe_ingredients,
