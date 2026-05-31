@@ -3,7 +3,7 @@ import sys
 import queue
 import threading
 import json
-from flask import Flask, render_template, request, redirect, url_for, flash, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_from_directory
 from datetime import datetime, timedelta
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -53,6 +53,10 @@ current_week_low_staples = []
 @app.route('/favicon.ico')
 def favicon():
     return redirect(url_for('static', filename='favicon.svg'))
+
+@app.route('/sw.js')
+def sw():
+    return send_from_directory('static', 'sw.js', mimetype='application/javascript')
 
 @app.route('/')
 def index():
