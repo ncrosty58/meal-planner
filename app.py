@@ -14,11 +14,12 @@ from meal_planner import (
     sync_shopping_list,
     calculate_nutrition_for_range,
     check_blackstone_compatibility,
-    send_email
+    send_email,
+    send_daily_reminder_email
 )
 
-from config import ACTIVE_LIST_ID, STAPLES_LIST_ID, RDA, TIMEZONE, APP_URL, FAMILY_RECIPIENT_EMAILS, FAMILY_NAMES
-from clear_mealie import wipe_mealie_data
+from mealie_planner.config import ACTIVE_LIST_ID, STAPLES_LIST_ID, RDA, TIMEZONE, APP_URL, FAMILY_RECIPIENT_EMAILS, FAMILY_NAMES
+from scripts.clear_mealie import wipe_mealie_data
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'mealie_companion_secret_9926')
@@ -330,7 +331,6 @@ def send_saturday_qa_email_job():
 
 def send_daily_reminder_job():
     """Job to email daily meal reminders to family at 7:00 AM."""
-    from email_notifier import send_daily_reminder_email
     return send_daily_reminder_email()
 
 
