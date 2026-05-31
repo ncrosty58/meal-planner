@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from .config import (
     FAMILY_DIETARY_RULES_PROMPT, PROCESSED_MEATS, BREAKFAST_PROFILES, get_banned_recipes,
     _MEAL_EXCLUSION_PARSING_SKILL_DEFINITION, _WEEKLY_MEAL_SELECTION_SKILL_DEFINITION,
-    _BANNED_RECIPES_SKILL_DEFINITION
+    _BANNED_RECIPES_SKILL_DEFINITION, _INGREDIENT_PARSING_SKILL_DEFINITION
 )
 from .recipe_crawler import RecipeCrawler
 from .shopping_sync import ShoppingListSync
@@ -62,6 +62,32 @@ class PlanGenerator:
             print(f"[AI] parse_exclusions failed: {e} — no exclusions applied")
             return {}
 
+    def parse_freezer_items(self, text: str) -> list:
+        """Use Gemini to parse free-text freezer/pantry/fridge items into structured ingredient data."""
+        if not text or not text.strip():
+            return []
+        
+        prompt = (
+            "You are an expert in the 'Ingredient Parsing Skill'.\n\n" +
+            _INGREDIENT_PARSING_SKILL_DEFINITION +
+            "\n\n### CONTEXT FOR THIS INVOCATION:\n" +
+            f"User input: {text}\n\n" +
+            "Return ONLY the JSON array as specified in the skill definition."
+        )
+        
+        try:
+            raw = self.gemini.call(prompt, expect_json=True)
+            result = json.loads(raw)
+            if isinstance(result, list):
+                print(f"[AI] Parsed freezer items: {result}")
+                return result
+        except Exception as e:
+            print(f"[AI] parse_freezer_items failed: {e} — falling back to simple split")
+        
+        # Fallback: simple comma split if AI fails
+        return [{"raw": i.strip(), "core_ingredient": i.strip(), "has_meat": False} 
+                for i in text.split(",") if i.strip()]
+
     def generate_weekly_plan(self, start_date_str, end_date_str, exclude_text="", freezer_items="", special_requests="", low_staples_ids=[], progress_callback=None):
         """Generate weekly plan using an AI-driven intelligent rule-based scoring engine and schedule in Mealie."""
         if progress_callback:
@@ -71,20 +97,33 @@ class PlanGenerator:
         all_recipes = self.crawler.get_recipes_from_db()
 
         priority_recipe_ids = []
+        # Map each freezer/pantry item to its resolved recipe ID for the AI prompt
+        item_to_recipe_map = {}
         if freezer_items:
-            items = [i.strip() for i in freezer_items.split(",") if i.strip()]
-            for item in items:
-                if progress_callback:
-                    progress_callback(f"Finding/importing recipe for item: {item}...", 15)
+            # Use AI to parse free-text items into structured ingredients
+            parsed_items = self.parse_freezer_items(freezer_items)
+            
+            for item in parsed_items:
+                core = item.get("core_ingredient", item.get("raw", ""))
+                raw = item.get("raw", core)
                 
-                recipe_id = self.crawler.find_recipe_for_ingredient(item, all_recipes=all_recipes)
+                if progress_callback:
+                    progress_callback(f"Finding/importing recipe for: {core}...", 15)
+                
+                recipe_id = self.crawler.find_recipe_for_ingredient(core, all_recipes=all_recipes)
                 if not recipe_id:
-                    if self.crawler.find_and_import_recipe(item, existing_recipe_ids=priority_recipe_ids):
+                    if self.crawler.find_and_import_recipe(core, existing_recipe_ids=priority_recipe_ids):
                         all_recipes = self.crawler.get_recipes_from_db()
-                        recipe_id = self.crawler.find_recipe_for_ingredient(item, all_recipes=all_recipes)
+                        recipe_id = self.crawler.find_recipe_for_ingredient(core, all_recipes=all_recipes)
                 
                 if recipe_id and recipe_id not in priority_recipe_ids:
                     priority_recipe_ids.append(recipe_id)
+                    item_to_recipe_map[raw] = recipe_id
+                elif recipe_id:
+                    item_to_recipe_map[raw] = recipe_id
+                else:
+                    print(f"[Plan Generation] WARNING: Could not find or import a recipe for '{raw}' (core: '{core}')")
+                    
                     
         if progress_callback:
             progress_callback("Filtering recipes and checking exclusions...", 40)
@@ -104,14 +143,13 @@ class PlanGenerator:
             
             r['_all_text'] = all_text
             
-            if any(kw in all_text for kw in PROCESSED_MEATS):
-                continue
-                
+            # Check against specific banned recipe names
             is_banned = False
             for banned_name in banned_recipes:
                 if banned_name in name_lower or banned_name in slug_lower or name_lower in banned_name:
                     is_banned = True
                     break
+            
             if is_banned:
                 print(f"[Plan Generation] Excluding banned recipe: {r['name']}")
                 continue
@@ -122,8 +160,8 @@ class PlanGenerator:
             print("Warning: No recipes left after filtering! Using unfiltered recipes.")
             allowed_recipes = all_recipes
             
-        if progress_callback:
-            progress_callback("Filtering recipes and checking exclusions...", 40)
+        # Build a lookup map for validation after AI selection
+        catalogue_ids = {r['id'] for r in allowed_recipes}
 
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
         end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
@@ -182,6 +220,7 @@ class PlanGenerator:
             f"- **Plan Start Date (Saturday)**: {start_date_str}\n" +
             f"- **Meal Exclusions (Skipped/Eating Out)**: {json.dumps(exclusions)}\n" +
             f"- **Freezer/Pantry/Fridge items to prioritize**: {freezer_items or 'none'}\n" +
+            (f"- **MANDATORY Priority Recipes (MUST include ALL of these in the plan)**: {json.dumps(item_to_recipe_map)}\n" if item_to_recipe_map else "") +
             f"- **Special requests from the family**: {special_requests or 'none'}\n" +
             f"- **Recently planned recipes (AVOID selecting these)**: {', '.join(recent_recipe_names) if recent_recipe_names else 'none'}\n\n" +
             f"### RECIPE CATALOGUE (JSON):\n" +
@@ -216,7 +255,12 @@ class PlanGenerator:
                         is_uuid = False
                 
                 if is_uuid:
-                    meals.append({"date": d_str, "entryType": "dinner", "title": "", "recipeId": din_val, "text": prep_note})
+                    # Deterministic Safety Check: Verify ID exists in catalogue
+                    if din_val in catalogue_ids:
+                        meals.append({"date": d_str, "entryType": "dinner", "title": "", "recipeId": din_val, "text": prep_note})
+                    else:
+                        print(f"[Plan Generation] WARNING: AI hallucinated recipe ID {din_val}. Falling back to text entry.")
+                        meals.append({"date": d_str, "entryType": "dinner", "title": "Planned Dinner", "recipeId": None, "text": prep_note})
                 else:
                     meals.append({"date": d_str, "entryType": "dinner", "title": din_val or "Eating Out", "recipeId": None, "text": prep_note})
                 
@@ -278,7 +322,7 @@ class PlanGenerator:
                 recipe_id=m.get('recipeId')
             )
             
-        self.shopping.sync_shopping_list(start_date_str, end_date_str, low_staples_ids, progress_callback=progress_callback)
+        self.shopping.sync_shopping_list(start_date_str, end_date_str, low_staples_ids, progress_callback=progress_callback, freezer_items=freezer_items)
         
         if progress_callback:
             progress_callback("Sending weekly plan report email to family...", 99)

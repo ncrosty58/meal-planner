@@ -11,6 +11,7 @@ This skill takes the raw ingredient strings from dinner recipes, a list of house
 - `payload`: A JSON object containing:
     - `ingredients`: A list of raw recipe ingredient strings (e.g. `["2 cloves garlic, minced", "1 lb chicken breast"]`).
     - `staples`: A list of staple names already in the house (e.g. `["salt", "pepper"]`).
+    - `inventory_items`: A list of specific items the user wants to "use up" from their freezer/pantry/fridge (e.g. `["1 lb chicken thighs", "pesto sauce"]`).
     - `low_staples`: A list of staple names that are currently running low and MUST be added (e.g. `["garlic"]`).
 
 ## Workflow
@@ -19,20 +20,20 @@ This skill takes the raw ingredient strings from dinner recipes, a list of house
     - Detect any ingredients representing plain tap water (e.g., "water", "cold water", "hot water", "tap water", "water to cover"). Exclude them entirely from the output.
     - Keep specialty waters that must be purchased (e.g., "coconut water", "rose water", "sparkling water").
 
-2.  **Filter Staples:**
-    - Compare each recipe ingredient against the `staples` list (handle exact, singular/plural, and minor semantic variations, e.g. "cloves of garlic" or "garlic cloves" or "garlic" vs "garlic").
-    - If the ingredient matches a staple:
+2.  **Filter Staples and Inventory:**
+    - Compare each recipe ingredient against the combined list of `staples` and `inventory_items`.
+    - Handle exact, singular/plural, and minor semantic variations (e.g. "cloves of garlic" or "garlic cloves" or "garlic" vs "garlic").
+    - For `inventory_items`, prioritize matching the core ingredient (e.g., "1 lb chicken thighs" should match "chicken thighs" in a recipe).
+    - If the ingredient matches a staple or an inventory item:
       - Exclude it *unless* it matches an item in the `low_staples` list.
       - If it is in the `low_staples` list, include it.
-    - If the ingredient does not match a staple, include it.
+    - If the ingredient does not match a staple or inventory item, include it.
 
-3.  **Clean Ingredient Names:**
-    - For each ingredient, extract the core name by removing:
-      - Quantities, fractions, and numbers (e.g. "1", "1/2", "2.5").
-      - Units of measure (e.g. "lb", "oz", "cup", "can", "clove", "tsp", "tbsp", "gallon"). These will be captured in the `unit` field.
-      - Preparation instructions, descriptions, and comments (e.g. "minced", "finely chopped", "grated", "sliced", "drained", "to taste", "optional", "warmed").
-      - Any parenthetical notes or leftover brackets/punctuation (e.g. "(optional)", "(, minced or finely chopped)", "($0.10)").
-    - Format and capitalize the resulting ingredient name in Title Case (e.g. "1 lb chicken breast" -> "Chicken Breast", "3 cloves garlic, minced" -> "Garlic").
+3.  **Clean Ingredient Names & Organic Tagging:**
+    - For each ingredient, extract the core name by removing quantities, units, and preparation instructions.
+    - **Organic Tagging (Dirty Dozen):** If the cleaned ingredient name matches any item from the "Dirty Dozen" list below, automatically append **(Buy Organic)** to the name.
+      - *Dirty Dozen List:* Strawberries, Spinach, Kale, Collard Greens, Mustard Greens, Grapes, Peaches, Pears, Nectarines, Apples, Bell Peppers, Hot Peppers, Chili Peppers, Cherries, Blueberries, Green Beans.
+    - Format and capitalize the resulting ingredient name in Title Case (e.g. "1 lb spinach" -> "Spinach (Buy Organic)", "3 cloves garlic" -> "Garlic").
 
 4.  **Extract Unit and Aggregate Quantities:**
     - For each ingredient, extract the unit of measure (e.g., "lb", "oz", "cup", "can", "clove", "tsp", "tbsp").

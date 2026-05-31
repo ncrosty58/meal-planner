@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
 import requests
 
-from .config import load_skill_md, _RECIPE_FINDER_SKILL_DEFINITION
+from .config import load_skill_md, _RECIPE_FINDER_SKILL_DEFINITION, get_banned_recipes
 
 class RecipeCrawler:
     def __init__(self, mealie_client, gemini_client):
@@ -13,11 +13,15 @@ class RecipeCrawler:
         self.gemini = gemini_client
 
     def find_recipe_for_ingredient(self, ingredient, all_recipes=None):
-        """Look for a recipe in Mealie containing the ingredient in its name or ingredients notes."""
+        """Look for a recipe in Mealie containing the ingredient in its name or ingredients notes.
+        
+        Expects a clean ingredient term (e.g., 'chicken thighs', 'cilantro') — 
+        normalization is handled upstream by the AI ingredient-parsing skill.
+        """
         if all_recipes is None:
             all_recipes = self.get_recipes_from_db()
         
-        ing_lower = ingredient.lower()
+        ing_lower = ingredient.lower().strip()
         
         # 1. Match recipe name (handle Mealie duplicate suffixes like ' (1)')
         for r in all_recipes:
@@ -30,8 +34,19 @@ class RecipeCrawler:
         for r in all_recipes:
             for ing_text in r.get('ingredients', []):
                 if ing_lower in ing_text.lower():
-                    return r['id']            
+                    return r['id']
+        
+        # 3. Fallback: check if ALL significant words appear in a recipe's ingredients
+        words = [w for w in ing_lower.split() if len(w) > 2]
+        if words:
+            for r in all_recipes:
+                all_ing_text = ' '.join(ing.lower() for ing in r.get('ingredients', []))
+                if all(w in all_ing_text for w in words):
+                    return r['id']
+        
         return None
+
+
 
     def find_and_import_recipe(self, ingredient, existing_recipe_ids=[]) -> bool:
         """Search for and import a recipe into Mealie using the Mealie Recipe Finder Skill workflow."""
@@ -41,7 +56,7 @@ class RecipeCrawler:
         all_recipes_overview = self.client.get_all_recipes()
         existing_urls = {r.get('orgURL') for r in all_recipes_overview if r.get('orgURL')}
 
-        # 1. Construct Search Query
+        # 1. Construct Search Query (ingredient is already normalized by AI upstream)
         meat_keywords = {'chicken', 'beef', 'salmon', 'turkey', 'pork', 'fish', 'steak', 'tuna', 'poultry', 'lamb'}
         ingredient_lower = ingredient.lower()
         has_meat = any(kw in ingredient_lower for kw in meat_keywords)
@@ -137,6 +152,19 @@ class RecipeCrawler:
                 print(f"[Recipe Finder] Recipe URL already exists in Mealie: {url}. Skipping import.")
                 return True
             
+            # Check title against banned recipe names BEFORE importing
+            banned_names = [n.lower() for n in get_banned_recipes()]
+            
+            is_banned_import = False
+            for bn in banned_names:
+                if bn in title_lower or title_lower in bn:
+                    is_banned_import = True
+                    break
+            
+            if is_banned_import:
+                print(f"[Recipe Finder] REJECTED banned recipe before import: {title}")
+                continue
+            
             # Validation prompt
             validation_prompt = (
                 f"You are an expert in the 'Mealie Recipe Link Validator Skill'.\n\n"
@@ -181,6 +209,19 @@ class RecipeCrawler:
                             continue
 
                         print(f"[Recipe Finder] Successfully imported recipe to Mealie with image. Slug: {slug}")
+                        
+                        # Post-import safety check: verify imported recipe isn't banned
+                        imported_name_lower = recipe_details.get('name', '').lower()
+                        post_ban = False
+                        for bn in banned_names:
+                            if bn in imported_name_lower or imported_name_lower in bn:
+                                post_ban = True
+                                break
+                        if post_ban:
+                            print(f"[Recipe Finder] Post-import ban check FAILED for '{recipe_details['name']}'. Deleting.")
+                            self.client.delete_recipe(recipe_details['id'])
+                            continue
+                        
                         return True
                     else:
                         print(f"[Recipe Finder] Mealie import failed with status {r.status_code}: {r.text}")

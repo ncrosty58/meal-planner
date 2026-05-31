@@ -3,7 +3,7 @@ import json
 import re
 
 from .config import (
-    ACTIVE_LIST_ID, STAPLES_LIST_ID, DIRTY_DOZEN,
+    ACTIVE_LIST_ID, STAPLES_LIST_ID,
     _SHOPPING_LIST_SYNC_SKILL_DEFINITION
 )
 from .recipe_crawler import RecipeCrawler
@@ -14,21 +14,7 @@ class ShoppingListSync:
         self.gemini = gemini_client
         self.crawler = RecipeCrawler(mealie_client, gemini_client)
 
-    def tag_dirty_dozen(self, note: str) -> str:
-        """If an ingredient belongs to the 'Dirty Dozen', automatically append '(Buy Organic)'."""
-        if not note:
-            return note
-            
-        note_lower = note.lower()
-        for item in DIRTY_DOZEN:
-            pattern = r'\b' + re.escape(item) + r's?\b'
-            if re.search(pattern, note_lower):
-                if "(buy organic)" not in note_lower and "organic" not in note_lower:
-                    return f"{note} (Buy Organic)"
-                break
-        return note
-
-    def sync_shopping_list(self, start_date_str, end_date_str, low_staples_ids=[], progress_callback=None) -> bool:
+    def sync_shopping_list(self, start_date_str, end_date_str, low_staples_ids=[], progress_callback=None, freezer_items="") -> bool:
         """Sync active shopping list based on scheduled recipes and low staples using the unified shopping-list-sync AI skill."""
         print(f"Starting AI shopping list sync for {start_date_str} to {end_date_str}...")
         if progress_callback:
@@ -48,6 +34,12 @@ class ShoppingListSync:
             
             # Map low staples to their notes (names) and build staples notes list
             staples_notes = [item['note'] for item in staples]
+
+            # Parse freezer items for the AI skill payload
+            inventory_items = []
+            if freezer_items:
+                inventory_items = [i.strip() for i in freezer_items.split(",") if i.strip()]
+
             low_staples_notes = []
             for item in staples:
                 clean_id = item['id'].replace('-', '')
@@ -90,6 +82,7 @@ class ShoppingListSync:
             payload = {
                 "ingredients": raw_recipe_ingredients,
                 "staples": staples_notes,
+                "inventory_items": inventory_items,
                 "low_staples": low_staples_notes
             }
             
@@ -149,11 +142,9 @@ class ShoppingListSync:
                 category = item.get('category') or ''
                 label_id = resolve_label_id(category) if category else None
                 
-                tagged = self.tag_dirty_dozen(name)
-                
                 # For ingredients, include the unit in the note (e.g. "1 lb Chicken Breast")
                 # For staples (where unit might be null/empty), just use the name
-                full_note = f"{unit} {tagged}".strip() if unit else tagged
+                full_note = f"{unit} {name}".strip() if unit else name
                 
                 ingredients_list.append({
                     "shoppingListId": ACTIVE_LIST_ID,

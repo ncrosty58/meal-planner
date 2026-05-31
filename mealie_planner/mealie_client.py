@@ -98,6 +98,11 @@ class MealieClient:
 
     def schedule_meal(self, date_str, entry_type, title="", text="", recipe_id=None):
         """Schedule a meal plan entry."""
+        # Mealie 422 fix: If recipeId is None, title MUST NOT be empty.
+        # It's treated as a 'Note' entry.
+        if not recipe_id and not title:
+            title = "Planned Meal"
+
         payload = {
             "date": date_str,
             "entryType": entry_type,

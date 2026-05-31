@@ -73,21 +73,7 @@ _WEEKLY_MEAL_SELECTION_SKILL_DEFINITION = load_skill_md('weekly-meal-selection')
 _SHOPPING_LIST_SYNC_SKILL_DEFINITION = load_skill_md('shopping-list-sync')
 _RECIPE_NUTRITION_IMPUTATION_SKILL_DEFINITION = load_skill_md('recipe-nutrition-imputation')
 _BANNED_RECIPES_SKILL_DEFINITION = load_skill_md('banned-recipes')
-
-# Dirty Dozen for Organic Tagging
-DIRTY_DOZEN = {
-    'strawberry', 'strawberries', 'spinach', 'kale', 'collard', 'mustard green', 
-    'mustard greens', 'grape', 'grapes', 'peach', 'peaches', 'pear', 'pears', 
-    'nectarine', 'nectarines', 'apple', 'apples', 'bell pepper', 'bell peppers', 
-    'hot pepper', 'hot peppers', 'chili pepper', 'chili peppers', 'cherry', 
-    'cherries', 'blueberry', 'blueberries', 'green bean', 'green beans'
-}
-
-# Processed meats to always exclude from meal planning
-PROCESSED_MEATS = {
-    'sausage', 'hotdog', 'hot dog', 'chorizo', 'salami',
-    'pepperoni', 'bacon', 'ham', 'pancetta'
-}
+_INGREDIENT_PARSING_SKILL_DEFINITION = load_skill_md('ingredient-parsing')
 
 # Breakfast Nutrition Profiles
 BREAKFAST_PROFILES = {

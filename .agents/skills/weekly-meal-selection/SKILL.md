@@ -11,7 +11,8 @@ This skill is responsible for generating a complete 7-day meal plan. It intellig
 - `family_dietary_rules_prompt`: Family-specific dietary rules and preferences.
 - `start_date`: The first day of the plan (always a Saturday).
 - `exclusions`: A JSON object mapping day names to lists of meals to skip (e.g., `{"Monday": ["dinner"]}`).
-- `freezer_pantry_fridge_items_priority`: Items to use up this week.
+- `freezer_pantry_fridge_items_priority`: Items to use up this week (comma-separated text from the user).
+- `mandatory_priority_recipes`: A JSON object mapping each user-specified item to its resolved recipe ID from the catalogue (e.g., `{"pesto": "uuid-1", "frozen chicken thighs": "uuid-2"}`). **Every recipe ID listed here MUST appear in the final plan.**
 - `special_requests`: Theme or specific request text.
 - `recently_planned_recipes`: List of recipe names to avoid repeating.
 - `recipe_catalogue_json`: Available Mealie dinner recipes.
@@ -20,14 +21,20 @@ This skill is responsible for generating a complete 7-day meal plan. It intellig
 
 1.  **Plan Dinners (Selection):** Select exactly the required number of dinner recipes from the catalogue (one for each non-excluded night).
     *   **Anti-Hallucination:** ONLY select IDs from the provided catalogue.
-    *   **Priorities:** High: "Use up" items; Medium: Special requests; General: Variety, fiber, no processed meats.
+    *   **MANDATORY "Use Up" Items (HIGHEST PRIORITY):** If `mandatory_priority_recipes` is provided, you **MUST** include **EVERY** recipe ID from that mapping in the plan. This is non-negotiable. Do not skip any of them. If there are 3 items, all 3 corresponding recipes must appear as dinners. The remaining dinner slots should be filled with other catalogue recipes following the priorities below.
+    *   **Other Priorities:** Medium: Special requests; General: Variety, fiber, no processed meats.
     *   **Ingredient Synergy / Re-use:** Prioritize selecting recipes that share overlapping fresh/perishable ingredients (e.g., cilantro, lime, cabbage, spinach, broccoli, fresh herbs) to minimize grocery waste.
-    *   **Banned Recipes Exclusions:** You MUST strictly avoid selecting any recipes that match the names, name variants, ingredient profiles, or culinary themes of banned recipes defined in the Banned Recipes Skill (e.g., do not select any cilantro or coriander-based soup recipes, even if named differently). Use semantic reasoning to filter them out.
+    *   **Banned Recipes & Processed Meats Exclusions:** 
+        *   **Strict Prohibition:** You MUST NOT select any recipes that contain processed, sausage-type meats. This includes: Sausages, Hot Dogs, Chorizo, Salami, Pepperoni, Bacon, Ham, and Pancetta.
+        *   **Banned Recipes Skill:** Strictly avoid recipes matching the names, variants, or themes of banned recipes defined in the Banned Recipes Skill (e.g., cilantro/coriander soups). Use semantic reasoning for enforcement.
 
-2.  **Plan Dinners (Ordering):** 
+2.  **Plan Dinners (Ordering & Griddle Prep):** 
     *   **Perishability:** Fresh/perishable ingredients go Early Week (Sat-Tue). Frozen/shelf-stable go Late Week (Wed-Fri).
     *   **"Use Up" Items:** If they are frozen/stable, they MUST go Late Week.
-    *   **Prep-Ahead / Blackstone Optimization:** Sequence dinners to maximize batch-cooking opportunities. If a Blackstone griddle recipe is scheduled, check if adjacent dinners (especially the next night) use griddle-friendly ingredients (such as chopped onions, peppers, chicken, tofu, or grains). Group/order them so they can be cooked ahead on the griddle at the same time.
+    *   **Blackstone Griddle & Batch Optimization:** 
+        *   **Semantic Detection:** Identify if a recipe is compatible with a Blackstone griddle (even if not explicitly named so) based on ingredients and techniques (e.g., stir-fries, smashed burgers, seared proteins, chopped vegetables).
+        *   **Prep Notes:** If a dinner is griddle-compatible, or if adjacent dinners share prep steps, you **MUST** provide a `prep_note`.
+        *   **Batch Cooking:** Sequence dinners to maximize batch-cooking. For example, if cooking chicken on the griddle for Saturday, suggest prepping Monday's fajita vegetables or Sunday's stir-fry tofu at the same time.
     *   **Nutritional Balance:** Avoid scheduling heavy, high-calorie dinners or low-protein/low-fiber dinners consecutively. Distribute nutritional loads evenly across the week.
 
 3.  **Plan Lunches (Intelligent Selection):** For each day, choose between **"Leftovers"** or **"PB&J Sandwich"**.
