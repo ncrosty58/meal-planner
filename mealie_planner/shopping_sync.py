@@ -85,49 +85,10 @@ class ShoppingListSync:
             if progress_callback:
                 progress_callback("Generating final shopping list using AI...", 96)
             
-            # Fetch actual labels from Mealie
+            # Fetch standardized labels from Mealie
             all_labels = self.client.get_labels()
-            
-            # Label Preference Filter: If we have specific names, don't even let the AI see the generic ones.
-            # This ensures Mealie saves the data using the "clean" labels.
-            PREFERENCE_MAP = {
-                "Vegetables & Greens": ["1. Produce", "Produce"],
-                "Fruits": ["1. Produce", "Produce"],
-                "Mushrooms": ["1. Produce", "Produce"],
-                "Herbs & Spices": ["1. Produce", "Produce", "6. Baking, Spices & Condiments", "6. Baking, Spices, Oils & Condiments"],
-                "Bakery": ["2. Bakery"],
-                "Bread & Salty Snacks": ["2. Bakery"],
-                "Meats": ["3. Meat, Seafood & Vegetarian Alternatives", "Meat", "3. Meat & Seafood"],
-                "Poultry": ["3. Meat, Seafood & Vegetarian Alternatives", "Meat", "3. Meat & Seafood"],
-                "Fish": ["3. Meat, Seafood & Vegetarian Alternatives", "Meat", "3. Meat & Seafood"],
-                "Seafood & Seaweed": ["3. Meat, Seafood & Vegetarian Alternatives", "Meat", "3. Meat & Seafood"],
-                "Dairy & Eggs": ["4. Dairy, Cheese & Eggs", "Dairy"],
-                "Cheese": ["4. Dairy, Cheese & Eggs", "Dairy"],
-                "Pantry": ["5. Pantry / Center Aisle Grains & Canned Goods"],
-                "Grains & Cereals": ["5. Pantry / Center Aisle Grains & Canned Goods"],
-                "Pasta": ["5. Pantry / Center Aisle Grains & Canned Goods"],
-                "Canned Food": ["5. Pantry / Center Aisle Grains & Canned Goods"],
-                "Soups, Stews & stock": ["5. Pantry / Center Aisle Grains & Canned Goods"],
-                "Legumes": ["5. Pantry / Center Aisle Grains & Canned Goods"],
-                "Baking": ["6. Baking, Spices, Oils & Condiments", "6. Baking, Spices & Condiments"],
-                "Oils & Fats": ["6. Baking, Spices, Oils & Condiments", "6. Baking, Spices & Condiments"],
-                "Seasonings & Spice Blends": ["6. Baking, Spices, Oils & Condiments", "6. Baking, Spices & Condiments"],
-                "Sugar & Sweeteners": ["6. Baking, Spices, Oils & Condiments", "6. Baking, Spices & Condiments"],
-                "Condiments": ["6. Baking, Spices, Oils & Condiments", "6. Baking, Spices & Condiments"],
-                "Frozen Foods": ["7. Frozen Foods"],
-                "Beverages": ["8. Beverages"],
-                "Wine, Beer & Spirits": ["8. Beverages"]
-            }
-
-            label_names = {l['name'] for l in all_labels}
-            labels_to_suppress = set()
-            for preferred, generics in PREFERENCE_MAP.items():
-                if preferred in label_names:
-                    labels_to_suppress.update(generics)
-            
-            filtered_labels = [l for l in all_labels if l['name'] not in labels_to_suppress]
-            available_label_names = [l['name'] for l in filtered_labels]
-            label_name_to_id = {l['name']: l['id'] for l in filtered_labels}
+            available_label_names = [label['name'] for label in all_labels]
+            label_name_to_id = {label['name']: label['id'] for label in all_labels}
 
             payload = {
                 "ingredients": raw_recipe_ingredients,
@@ -150,7 +111,7 @@ class ShoppingListSync:
                 "Return ONLY the JSON array of objects as specified in the skill definition."
             )
             
-            print(f"--- AI SHOPPING LIST SYNC PROMPT ({len(available_label_names)} labels) ---")
+            print(f"--- AI SHOPPING LIST SYNC PROMPT ({len(available_label_names)} zones) ---")
             ai_response = self.gemini.call(prompt, expect_json=True)
             
             try:
@@ -211,4 +172,3 @@ def sync_shopping_list(start_date_str, end_date_str, low_staples_ids=[], progres
     gemini = GeminiClient()
     syncer = ShoppingListSync(client, gemini)
     return syncer.sync_shopping_list(start_date_str, end_date_str, low_staples_ids, progress_callback, freezer_items)
-
