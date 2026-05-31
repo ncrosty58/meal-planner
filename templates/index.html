@@ -200,11 +200,56 @@
         .item-text.checked { text-decoration: line-through; opacity: 0.5; }
         .badge-organic { font-size: 8px; font-weight: 800; background: #EEF3F1; color: var(--color-success); padding: 1px 4px; border-radius: 2px; text-transform: uppercase; margin-left: 4px; }
 
-        /* --- NUTRITION --- */
-        .nutrition-strip { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-        .nut-stat { background: #FAF9F6; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: 2px; flex: 1; min-width: 100px; }
-        .nut-stat .label { display: block; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; color: var(--color-muted); margin-bottom: 2px; }
-        .nut-stat .val { font-size: 0.9rem; font-weight: 600; color: var(--color-primary); }
+        /* --- NUTRITION CHARTS --- */
+        .nutrition-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 1.25rem;
+        }
+        .nut-card {
+            background: #FAF9F6;
+            padding: 1.25rem;
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+        }
+        .nut-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-bottom: 0.5rem;
+        }
+        .nut-label {
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--color-muted);
+            letter-spacing: 1px;
+        }
+        .nut-val {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--color-primary);
+        }
+        .nut-track {
+            height: 6px;
+            background: var(--color-divider);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+        .nut-fill {
+            height: 100%;
+            background: var(--color-primary);
+            border-radius: 10px;
+            transition: width 1s ease-out;
+        }
+        .nut-pct {
+            font-size: 0.7rem;
+            font-weight: 700;
+            margin-top: 0.4rem;
+            display: block;
+            text-align: right;
+        }
 
         /* --- BUTTONS --- */
         .btn { font-family: var(--font-body); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; font-size: 0.7rem; padding: 0.5rem 1rem; border-radius: 2px; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 0.5rem; }
@@ -369,15 +414,25 @@
                 </div>
             </div>
             <div class="card" style="margin-top: 1.5rem;">
-                <div class="card-header"><h2 class="card-title" style="font-size: 1.1rem;">Averages</h2></div>
-                <div class="nutrition-strip">
+                <div class="card-header"><h2 class="card-title" style="font-size: 1.1rem;">Nutritional Averages</h2></div>
+                <div class="nutrition-grid">
                     {% for k, rda_val in rda.items() %}
                         {% set avg_val = averages.get(k, 0.0) %}
                         {% set pct = ((avg_val / rda_val) * 100) | round | int if rda_val > 0 else 0 %}
-                        <div class="nut-stat">
-                            <span class="label">{{ k }}</span>
-                            <span class="val">{{ avg_val }}{{ 'kcal' if k == 'calories' else ('mg' if k in ['sodium', 'cholesterol'] else 'g') }}</span>
-                            <span style="font-size: 0.7rem; font-weight: 700; margin-left: 4px; color: {{ 'var(--color-danger)' if k == 'sodium' and pct > 100 else ('var(--color-accent)' if k == 'fiber' and pct < 100 else 'var(--color-primary)') }};">{{ pct }}%</span>
+                        {% set display_pct = 100 if pct > 100 else pct %}
+                        {% set bar_color = 'var(--color-primary)' %}
+                        {% if k == 'sodium' and pct > 100 %}{% set bar_color = 'var(--color-danger)' %}{% endif %}
+                        {% if k == 'fiber' and pct < 100 %}{% set bar_color = 'var(--color-accent)' %}{% endif %}
+                        
+                        <div class="nut-card">
+                            <div class="nut-meta">
+                                <span class="nut-label">{{ k }}</span>
+                                <span class="nut-val">{{ avg_val }}{{ 'kcal' if k == 'calories' else ('mg' if k in ['sodium', 'cholesterol'] else 'g') }}</span>
+                            </div>
+                            <div class="nut-track">
+                                <div class="nut-fill" style="width: {{ display_pct }}%; background-color: {{ bar_color }};"></div>
+                            </div>
+                            <span class="nut-pct" style="color: {{ bar_color }};">{{ pct }}% of RDA</span>
                         </div>
                     {% endfor %}
                 </div>
