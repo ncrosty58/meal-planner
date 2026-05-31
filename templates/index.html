@@ -776,7 +776,7 @@
                                     <div class="meal-desc" style="color: var(--color-primary); font-weight: 500; font-size: 0.95rem; margin-top: 0.25rem;">
                                         🥘 <strong>D:</strong> 
                                         {% if dinner_entry and dinner_entry[0].recipeId %}
-                                            <a href="https://mealie.cosmoslab.dev/g/home/r/{{ dinner_entry[0].recipe.slug }}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dotted var(--color-primary);">{{ meals.dinner }}</a>
+                                            <a href="{{ mealie_url }}/g/home/r/{{ dinner_entry[0].recipe.slug }}" style="color: inherit; text-decoration: none; border-bottom: 1px dotted var(--color-primary);">{{ meals.dinner }}</a>
                                             {% if dinner_entry[0].is_blackstone %}
                                                 <span style="font-size: 0.75rem; background: rgba(229, 131, 37, 0.2); color: var(--color-primary); padding: 1px 6px; border-radius: 4px; margin-left: 5px; font-weight: bold;">🍳 GRIDDLE</span>
                                             {% endif %}
@@ -814,7 +814,7 @@
                         <div>
                             <div class="control-group-label">Shopping & Inventory</div>
                             <div class="control-group-buttons">
-                                <a href="{{ mealie_url }}/shopping-lists/{{ active_list_id }}" target="_blank" class="btn btn-primary" style="background: linear-gradient(135deg, var(--color-success) 0%, #059669 100%); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">🛒 Open Shopping List</a>
+                                <a href="{{ mealie_url }}/shopping-lists/{{ active_list_id }}" class="btn btn-primary" style="background: linear-gradient(135deg, var(--color-success) 0%, #059669 100%); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">🛒 Open Shopping List</a>
 
                                 <button type="button" class="btn btn-secondary" onclick="openStaplesModal()">📋 Manage Staples</button>
                             </div>
@@ -824,7 +824,7 @@
                         <div>
                             <div class="control-group-label">System</div>
                             <div class="control-group-buttons">
-                                <a href="{{ mealie_url }}" target="_blank" class="btn btn-secondary">🌐 Open Mealie UI</a>
+                                <a href="{{ mealie_url }}" class="btn btn-secondary">🌐 Open Mealie UI</a>
                             </div>
                         </div>
                     </div>
