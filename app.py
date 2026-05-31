@@ -27,11 +27,14 @@ MEALIE_FRONTEND_URL = os.getenv('MEALIE_FRONTEND_URL', 'https://mealie.cosmoslab
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'mealie_companion_secret_9926')
 
-# Helper to calculate the planning week range (starts Saturday, ends next Friday)
+# Helper to calculate the planning week range (starts most recent Saturday, ends next Friday)
 def get_planning_dates():
     today = datetime.now(pytz.timezone(TIMEZONE))
-    days_to_saturday = (5 - today.weekday() + 7) % 7
-    start_date = today + timedelta(days=days_to_saturday)
+    # Find the most recent Saturday (or today if it is Saturday)
+    # weekday(): Mon=0, ..., Fri=4, Sat=5, Sun=6
+    days_since_saturday = (today.weekday() - 5 + 7) % 7
+    start_date = today - timedelta(days=days_since_saturday)
+    # Planning week is 7 days: Saturday to Friday
     end_date = start_date + timedelta(days=6)
     return start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
 
