@@ -557,11 +557,30 @@
         
         function copyShoppingList(btn) {
             const lines = [];
-            document.querySelectorAll('.shopping-item').forEach(item => {
-                const cb = item.querySelector('.item-checkbox');
-                if (cb && !cb.checked) lines.push('- ' + item.querySelector('.item-text').innerText.trim());
+            const groups = document.querySelectorAll('.category-group');
+            
+            groups.forEach(group => {
+                const title = group.querySelector('.category-title');
+                const items = group.querySelectorAll('.shopping-item');
+                const uncheckedItems = [];
+                
+                items.forEach(item => {
+                    const cb = item.querySelector('.item-checkbox');
+                    if (cb && !cb.checked) {
+                        uncheckedItems.push('- ' + item.querySelector('.item-text').innerText.trim());
+                    }
+                });
+                
+                if (uncheckedItems.length > 0) {
+                    if (title) lines.push(title.innerText.trim().toUpperCase());
+                    lines.push(...uncheckedItems);
+                    lines.push(''); // Blank line between groups
+                }
             });
-            if (!lines.length) return alert("No items.");
+
+            if (!lines.length) return alert("No active items to copy.");
+            if (lines[lines.length-1] === '') lines.pop(); // Clean up trailing space
+
             navigator.clipboard.writeText(lines.join('\n')).then(() => {
                 const old = btn.innerText; btn.innerText = "Copied!"; setTimeout(() => btn.innerText = old, 2000);
             });
