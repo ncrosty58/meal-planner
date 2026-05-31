@@ -1283,7 +1283,7 @@
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                         <div class="card-title" style="margin-bottom: 0;">🛒 Live Shopping List</div>
-                        <button type="button" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.8rem; display: flex; align-items: center; gap: 0.4rem;" onclick="copyShoppingList()">
+                        <button type="button" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.8rem; display: flex; align-items: center; gap: 0.4rem;" onclick="copyShoppingList(event)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                             Copy List
                         </button>
@@ -2006,7 +2006,8 @@
             }
 
         // 13. Copy Shopping List to Clipboard
-        function copyShoppingList() {
+        function copyShoppingList(event) {
+            const btn = event.currentTarget;
             const items = document.querySelectorAll('.shopping-item');
             const lines = [];
             
@@ -2029,25 +2030,56 @@
 
             const fullText = lines.join('\n');
             
-            navigator.clipboard.writeText(fullText).then(() => {
-                const btn = event.currentTarget;
-                const originalText = btn.innerHTML;
-                btn.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Copied!
-                `;
-                btn.classList.remove('btn-secondary');
-                btn.classList.add('btn-primary');
-                
-                setTimeout(() => {
-                    btn.innerHTML = originalText;
-                    btn.classList.remove('btn-primary');
-                    btn.classList.add('btn-secondary');
-                }, 2000);
-            }).catch(err => {
-                console.error('Could not copy text: ', err);
-                alert("Failed to copy to clipboard.");
-            });
+            // Modern Clipboard API with simple fallback
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(fullText).then(() => {
+                    handleCopySuccess(btn);
+                }).catch(err => {
+                    console.error('Clipboard API failed:', err);
+                    fallbackCopy(fullText, btn);
+                });
+            } else {
+                fallbackCopy(fullText, btn);
+            }
+        }
+
+        function fallbackCopy(text, btn) {
+            try {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.top = "0";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                if (successful) {
+                    handleCopySuccess(btn);
+                } else {
+                    alert("Unable to copy to clipboard.");
+                }
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+                alert("Failed to copy list.");
+            }
+        }
+
+        function handleCopySuccess(btn) {
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Copied!
+            `;
+            btn.classList.remove('btn-secondary');
+            btn.classList.add('btn-primary');
+            
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-secondary');
+            }, 2000);
         }
 
         // Trigger load from storage
