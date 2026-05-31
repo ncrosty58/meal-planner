@@ -72,9 +72,13 @@ class EmailNotifier:
             return None
         ingredients = []
         for ing in raw_details.get('recipeIngredient', []):
-            note = ing.get('note') or ""
-            orig = ing.get('originalText') or ""
-            ing_text = f"{note} {orig}".strip()
+            ing_text = ing.get('display') or ing.get('originalText')
+            if not ing_text:
+                note = ing.get('note') or ""
+                food_name = ing.get('food', {}).get('name') if ing.get('food') else ""
+                quantity = ing.get('quantity') or ""
+                unit = ing.get('unit', {}).get('name') if ing.get('unit') else ""
+                ing_text = f"{quantity} {unit} {food_name} {note}".strip()
             if ing_text:
                 ingredients.append(ing_text)
                 
